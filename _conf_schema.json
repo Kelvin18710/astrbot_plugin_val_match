@@ -1,0 +1,131 @@
+{
+  "default_levels": {
+    "description": "默认过滤等级",
+    "type": "string",
+    "default": "S",
+    "hint": "默认仅展示 S 级赛事。多个等级可用逗号、分号或换行分隔，例如 S,A"
+  },
+  "preferred_tournaments": {
+    "description": "关注赛事",
+    "type": "list",
+    "default": [],
+    "options": [
+      "Challengers 2026: DACH Evolution Stage 2",
+      "Challengers 2026: France Revolution Stage 2",
+      "Challengers 2026: Japan Split 1",
+      "Challengers 2026: Korea WDG Split 1",
+      "Challengers 2026: LATAM North ACE Masters",
+      "Challengers 2026: LATAM South ACE Masters",
+      "Challengers 2026: MENA Resilience Pulse Stage - Middle East",
+      "Challengers 2026: MENA Resilience Pulse Stage - North Africa",
+      "Challengers 2026: North America ACE Stage 2",
+      "Challengers 2026: NORTH//EAST Stage 2",
+      "Challengers 2026: SEA Split 2 - Indonesia Qualifier",
+      "Challengers 2026: SEA Split 2 - Philippines Qualifier",
+      "Challengers 2026: SEA Split 2 - Rest of SEA Qualifier",
+      "Challengers 2026: SEA Split 2 - Thailand Qualifier",
+      "Challengers 2026: SEA Split 2 - Vietnam Qualifier",
+      "Challengers 2026: Spain Rising Stage 3",
+      "Challengers 2026: Türkiye Birlik Stage 2",
+      "Game Changers 2026: Brazil Stage 1",
+      "Game Changers 2026: EMEA Stage 2",
+      "Game Changers 2026: Korea Split 1",
+      "Game Changers 2026: North America Stage 1",
+      "Game Changers 2026: Oceania Split 1",
+      "Game Changers 2026: Southeast Asia Split 1",
+      "VCT 2026: Americas Stage 1",
+      "VCT 2026: China Stage 1",
+      "VCT 2026: EMEA Stage 1",
+      "VCT 2026: Pacific Stage 1"
+    ],
+    "hint": "先运行 /val sync_events 同步可选赛事列表，再在这里多选你关注的赛事。选中后，后续输出会优先按这些赛事过滤。"
+  },
+  "image_day_offsets": {
+    "description": "图片命令展示日期偏移",
+    "type": "string",
+    "default": "-1,0,1",
+    "hint": "/val s 图片命令展示哪些天的比赛。逗号分隔，0=今天，-1=昨天，1=明天；默认昨天、今天、明天。"
+  },
+  "push_targets": {
+    "description": "每日推送目标",
+    "type": "text",
+    "default": "",
+    "hint": "每行一个目标。支持完整 unified_msg_origin，或简写 platform_id:group_id，例如 aiocqhttp:123456。配置后可使用 /val push_test 手动测试。"
+  },
+  "push_time": {
+    "description": "每日推送时间",
+    "type": "string",
+    "default": "09:00",
+    "hint": "24 小时制，格式 HH:MM"
+  },
+  "enable_daily_push": {
+    "description": "启用每日推送",
+    "type": "bool",
+    "default": false
+  },
+  "request_timeout_seconds": {
+    "description": "请求超时秒数",
+    "type": "int",
+    "default": 10
+  },
+  "retry_count": {
+    "description": "请求重试次数",
+    "type": "int",
+    "default": 2,
+    "hint": "网络超时、5xx 或临时故障时会按此次数重试。"
+  },
+  "cache_ttl_seconds": {
+    "description": "缓存时间秒数",
+    "type": "int",
+    "default": 300
+  },
+  "max_matches_per_message": {
+    "description": "单条消息最多展示多少场比赛",
+    "type": "int",
+    "default": 20
+  },
+  "include_completed": {
+    "description": "包含已结束比赛",
+    "type": "bool",
+    "default": true,
+    "hint": "默认启用，今天的查询会同时读取已结束比赛结果。"
+  },
+  "fetch_bo_from_details": {
+    "description": "从详情页补充 BO 信息",
+    "type": "bool",
+    "default": true,
+    "hint": "VLR 列表页缺少 BO 时，会访问部分详情页补全 Bo3 / Bo5。"
+  },
+  "max_detail_fetch_matches": {
+    "description": "最多补全多少场 BO",
+    "type": "int",
+    "default": 12
+  },
+  "vlr_api_url": {
+    "description": "VLR API 基础地址",
+    "type": "string",
+    "default": "https://vlrggapi.vercel.app",
+    "hint": "默认先尝试该公开接口；若不可用，插件会回退到 VLR 网页 HTML 解析。"
+  },
+  "vlr_web_base_url": {
+    "description": "VLR 网页基础地址",
+    "type": "string",
+    "default": "https://www.vlr.gg"
+  },
+  "display_timezone": {
+    "description": "展示时区",
+    "type": "string",
+    "default": "Asia/Shanghai",
+    "hint": "默认按北京时间输出比赛时间与日期归类。"
+  },
+  "vlr_schedule_pages": {
+    "description": "VLR 赛程页最多扫描页数",
+    "type": "int",
+    "default": 3
+  },
+  "vlr_results_pages": {
+    "description": "VLR 结果页最多扫描页数",
+    "type": "int",
+    "default": 3
+  }
+}

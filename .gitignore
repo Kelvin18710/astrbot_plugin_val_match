@@ -1,0 +1,6 @@
+__pycache__/
+*.py[cod]
+.venv/
+
+artifacts/logo_cache/
+artifacts/rendered/
