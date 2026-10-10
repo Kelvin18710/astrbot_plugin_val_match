@@ -7,7 +7,6 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
-
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -15,8 +14,12 @@ if str(ROOT) not in sys.path:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="VLR client offline smoke test")
-    parser.add_argument("--date", dest="custom_date", help="指定查询日期，格式 YYYY-MM-DD")
-    parser.add_argument("--level", dest="level", help="按等级过滤，例如 S 或 A", default="")
+    parser.add_argument(
+        "--date", dest="custom_date", help="指定查询日期，格式 YYYY-MM-DD"
+    )
+    parser.add_argument(
+        "--level", dest="level", help="按等级过滤，例如 S 或 A", default=""
+    )
     return parser.parse_args()
 
 
@@ -60,7 +63,9 @@ def format_match(match: Any) -> str:
     )
 
 
-async def run_query(client: Any, label: str, target_date: date, levels: list[str]) -> None:
+async def run_query(
+    client: Any, label: str, target_date: date, levels: list[str]
+) -> None:
     print(f"== {label}: {target_date.isoformat()} ==")
     print(f"display_timezone: {client.display_timezone}")
     matches = await client.get_matches_by_date(target_date)
@@ -74,7 +79,11 @@ async def run_query(client: Any, label: str, target_date: date, levels: list[str
         for match in preview[:5]:
             print(format_match(match))
     else:
-        request_entry = client.last_request_info.url if client.last_request_info else client.last_success_api
+        request_entry = (
+            client.last_request_info.url
+            if client.last_request_info
+            else client.last_success_api
+        )
         print(f"last_failure_reason: {client.last_failure_reason or '(empty)'}")
         print(f"request_entry: {request_entry or '(none)'}")
     print()
@@ -83,7 +92,9 @@ async def run_query(client: Any, label: str, target_date: date, levels: list[str
 async def main_async(args: argparse.Namespace) -> int:
     from clients.vlr import VlrClient
 
-    custom_date = date.fromisoformat(args.custom_date) if args.custom_date else date.today()
+    custom_date = (
+        date.fromisoformat(args.custom_date) if args.custom_date else date.today()
+    )
     levels = split_levels(args.level)
     config: dict[str, Any] = {
         "vlr_api_url": "https://vlrggapi.vercel.app",

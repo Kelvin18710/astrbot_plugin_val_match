@@ -1,44 +1,152 @@
 {
+  "prediction_enabled": {
+    "description": "启用群内竞猜",
+    "type": "bool",
+    "default": false,
+    "hint": "初始 0 分；猜中胜队得 2 分，同时猜中比分额外得 3 分，合计 5 分。开赛前 10 分钟封盘。"
+  },
+  "prediction_targets": {
+    "description": "竞猜目标群",
+    "type": "text",
+    "default": "",
+    "hint": "每行一个群会话，如 default:GroupMessage:123456。可在赛事控制台选群添加。各群积分独立。"
+  },
+  "prediction_daily_enabled": {
+    "description": "每日发送今日竞猜",
+    "type": "bool",
+    "default": true
+  },
+  "prediction_push_time": {
+    "description": "今日竞猜发送时间",
+    "type": "string",
+    "default": "09:00",
+    "hint": "HH:MM，按展示时区。启用紧随赛程时，同时接收赛程的群以赛程完成时间为准；其他竞猜群按此时间发送。"
+  },
+  "prediction_rank_enabled": {
+    "description": "定时发送群积分榜",
+    "type": "bool",
+    "default": true,
+    "hint": "未选择赛后模式的竞猜群按指定时间发送；赛后模式的群不再定时发送，等待当天比赛结束并结算。"
+  },
+  "prediction_rank_time": {
+    "description": "积分榜发送时间",
+    "type": "string",
+    "default": "23:00",
+    "hint": "HH:MM；按展示时区。仅用于定时模式的群，赛后模式不受此时间限制。未参与的成员为 0 分。"
+  },
+  "prediction_rank_after_matches_enabled": {
+    "description": "比赛结束后自动发送积分榜",
+    "type": "bool",
+    "default": false,
+    "hint": "为下方所选群启用赛后发榜：当天全部竞猜比赛结束、积分结算完成后发送一次。比赛跨午夜继续等待；发送失败自动重试，重载不重复。无比赛当天不发送。"
+  },
+  "prediction_rank_after_matches_targets": {
+    "description": "赛后积分榜群",
+    "type": "text",
+    "default": "",
+    "hint": "直接勾选需要赛后发榜的群，必须已加入竞猜目标群。所选群以赛后发送代替定时发送；未选群保留原有定时设置。"
+  },
   "default_levels": {
     "description": "默认过滤等级",
     "type": "string",
     "default": "S",
     "hint": "默认仅展示 S 级赛事。多个等级可用逗号、分号或换行分隔，例如 S,A"
   },
-  "preferred_tournaments": {
-    "description": "关注赛事",
+  "special_tournaments": {
+    "description": "特别关心赛事",
     "type": "list",
     "default": [],
     "options": [
-      "Challengers 2026: DACH Evolution Stage 2",
-      "Challengers 2026: France Revolution Stage 2",
-      "Challengers 2026: Japan Split 1",
-      "Challengers 2026: Korea WDG Split 1",
-      "Challengers 2026: LATAM North ACE Masters",
-      "Challengers 2026: LATAM South ACE Masters",
-      "Challengers 2026: MENA Resilience Pulse Stage - Middle East",
-      "Challengers 2026: MENA Resilience Pulse Stage - North Africa",
-      "Challengers 2026: North America ACE Stage 2",
-      "Challengers 2026: NORTH//EAST Stage 2",
-      "Challengers 2026: SEA Split 2 - Indonesia Qualifier",
-      "Challengers 2026: SEA Split 2 - Philippines Qualifier",
-      "Challengers 2026: SEA Split 2 - Rest of SEA Qualifier",
-      "Challengers 2026: SEA Split 2 - Thailand Qualifier",
-      "Challengers 2026: SEA Split 2 - Vietnam Qualifier",
-      "Challengers 2026: Spain Rising Stage 3",
-      "Challengers 2026: Türkiye Birlik Stage 2",
-      "Game Changers 2026: Brazil Stage 1",
-      "Game Changers 2026: EMEA Stage 2",
-      "Game Changers 2026: Korea Split 1",
-      "Game Changers 2026: North America Stage 1",
-      "Game Changers 2026: Oceania Split 1",
-      "Game Changers 2026: Southeast Asia Split 1",
-      "VCT 2026: Americas Stage 1",
-      "VCT 2026: China Stage 1",
-      "VCT 2026: EMEA Stage 1",
-      "VCT 2026: Pacific Stage 1"
+      "China Evolution Series 2026: Act 3",
+      "Game Changers 2026: Americas Last Chance Qualifier",
+      "Game Changers 2026: Brazil Finals",
+      "Game Changers 2026: China",
+      "Game Changers 2026: LATAM Main Event",
+      "Game Changers 2026: North America Stage 2",
+      "Game Changers 2026: Pacific",
+      "THE POKAL 2026",
+      "Valorant Champions 2026",
+      "VCT 2026: Americas Stage 2"
     ],
-    "hint": "先运行 /val sync_events 同步可选赛事列表，再在这里多选你关注的赛事。选中后，后续输出会优先按这些赛事过滤。"
+    "hint": "赛程、竞猜、开赛提醒和战报统一使用此赛事列表。可在赛事控制台搜索并勾选多个赛事。"
+  },
+  "special_push_targets": {
+    "description": "特别关心推送目标",
+    "type": "text",
+    "default": "",
+    "hint": "每行一个目标。可用 /val special_bind 把当前群加入推送目标。"
+  },
+  "special_start_notice_enabled": {
+    "description": "启用特别关心开赛提醒",
+    "type": "bool",
+    "default": true
+  },
+  "special_report_enabled": {
+    "description": "启用特别关心赛后战报",
+    "type": "bool",
+    "default": true
+  },
+  "special_map_report_enabled": {
+    "description": "启用特别关心逐图赛果",
+    "type": "bool",
+    "default": true,
+    "hint": "开启后，Bo1/Bo3/Bo5 的每张地图结束时会立即推送该图赛果；整场结束后的总体战报仍会正常发送。"
+  },
+  "special_map_check_interval_seconds": {
+    "description": "逐图赛果检查间隔秒数",
+    "type": "int",
+    "default": 60,
+    "hint": "仅在启用逐图赛果时生效。建议 60-300 秒；间隔越短，单图结束后的推送越及时。"
+  },
+  "special_result_check_interval_seconds": {
+    "description": "特别关心赛果检查间隔秒数",
+    "type": "int",
+    "default": 1800,
+    "hint": "比赛开始后按此间隔检查是否结束，默认 1800 秒即半小时。"
+  },
+  "special_start_poll_interval_seconds": {
+    "description": "特别关心开赛状态轮询间隔秒数",
+    "type": "int",
+    "default": 300,
+    "hint": "临近开赛时按此间隔刷新 VLR 状态。若比赛顺延或提前，只要 VLR 显示 LIVE/进行中，就会触发开赛提醒。"
+  },
+  "special_start_poll_lookahead_minutes": {
+    "description": "特别关心开赛提前轮询分钟数",
+    "type": "int",
+    "default": 60,
+    "hint": "距离预定开赛多少分钟内开始轮询状态。串场比赛可能提前或延后，默认提前 60 分钟开始。"
+  },
+  "special_match_window_minutes": {
+    "description": "开赛提醒窗口分钟数",
+    "type": "int",
+    "default": 20,
+    "hint": "按预定时间兜底触发时，比赛开赛后多少分钟内仍视为刚开赛；状态轮询命中进行中时不受此窗口限制。"
+  },
+  "enable_ai_match_comment": {
+    "description": "启用 AI 生成战报锐评",
+    "type": "bool",
+    "default": true,
+    "hint": "AI 会优先整合虎扑赛后帖、虎扑高亮回复和 VLR 评论区的重复观点；比赛数据只用于防止张冠李戴，不会在锐评里堆统计。没有可用模型或质量校验不通过时，会自动使用本地社区摘要。"
+  },
+  "image_theme": {
+    "description": "产图风格",
+    "type": "string",
+    "default": "studio_dark",
+    "options": [
+      "studio_dark",
+      "studio_light",
+      "premium_dark",
+      "premium_light",
+      "dark",
+      "light"
+    ],
+    "hint": "studio_dark=Studio 炭黑，studio_light=Studio 暖白；新版用于赛程、整场战报、开赛提醒和赛况图。逐图赛果继续沿用原有版式；旧风格仍可选择。"
+  },
+  "daily_progress_enabled": {
+    "description": "每日推送附带赛况图",
+    "type": "bool",
+    "default": true,
+    "hint": "开启后，每日推送和 /val push_test 会在赛程图后追加一张赛况图。插件会自动识别常规赛积分榜或季后赛淘汰晋级图。"
   },
   "image_day_offsets": {
     "description": "图片命令展示日期偏移",
@@ -107,6 +215,12 @@
     "default": "https://vlrggapi.vercel.app",
     "hint": "默认先尝试该公开接口；若不可用，插件会回退到 VLR 网页 HTML 解析。"
   },
+  "vlr_api_failure_cooldown_seconds": {
+    "description": "VLR API 失败熔断秒数",
+    "type": "int",
+    "default": 600,
+    "hint": "公开 API 超时或失败后，多少秒内直接使用 VLR 网页解析，避免每次生成图片都等待 API 超时。设为 0 可关闭。"
+  },
   "vlr_web_base_url": {
     "description": "VLR 网页基础地址",
     "type": "string",
@@ -127,5 +241,17 @@
     "description": "VLR 结果页最多扫描页数",
     "type": "int",
     "default": 3
+  },
+  "prediction_bot_enabled": {
+    "description": "机器人参与竞猜",
+    "type": "bool",
+    "default": false,
+    "hint": "结合双方历史交手、近期比赛表现和赛制，让当前模型独立预测。没有交手记录时也预测并说明依据较弱；群成员不能修改，按相同规则计分。"
+  },
+  "prediction_after_schedule": {
+    "description": "今日竞猜紧随赛程发送",
+    "type": "bool",
+    "default": false,
+    "hint": "同一群同时接收赛程和竞猜时，等赛程及赛况发送完成后立即发竞猜。只接收竞猜的群仍按今日竞猜发送时间播报；发送失败会重试。"
   }
 }

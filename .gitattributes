@@ -1,0 +1,5 @@
+tests/ export-ignore
+scripts/ export-ignore
+.github/ export-ignore
+.gitignore export-ignore
+pyproject.toml export-ignore

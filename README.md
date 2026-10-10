@@ -1,446 +1,148 @@
-# astrbot_plugin_val_match
+# VAL Match
 
-![插件图标占位](assets/icon.png)
+无畏契约赛事助手：查询赛程、推送赛况与战报，在群内用自然语言竞猜比分，并在比赛结算后自动发送积分榜。
 
-AstrBot 的无畏契约赛程插件，默认使用 `VLR` 获取数据，开箱即用，默认按北京时间展示。
+![MIT](https://img.shields.io/badge/license-MIT-green)
+![AstrBot](https://img.shields.io/badge/AstrBot-%3E%3D4.28.1-blue)
+![版本](https://img.shields.io/badge/version-0.8.0-blue)
 
-支持这些能力：
+数据来自 VLR.gg，默认使用北京时间。基础赛程查询无需配置额外 API Key。
 
-- 查询今天、明天、指定日期赛程
-- 默认只看 `S` 级赛事
-- 自定义“关注赛事”，按赛事名单精准过滤
-- 生成多日赛程图片 `/val s`
-- 显示已结束比分、进行中状态、未开始时间
-- 每日定时推送
-- 手动推送测试
+## 功能
 
-上面的图标文件当前只是占位图，你后续可以直接替换 `assets/icon.png`。
+- **赛程与赛况**：今天、明天、指定日期和多日赛事日历；赛事积分榜、淘汰晋级图和当前比赛状态。
+- **订阅与提醒**：特别关心赛事多选，每日定时推送、开赛提醒、逐图赛果和全场战报。
+- **完整战报**：地图比分、选图方、时长，以及十名选手的头像、国家、英雄、Rating、ACS、K/D/A、KAST、ADR、HS%、首杀等统计。可选 AI 赛后锐评。
+- **群内竞猜**：真实 @机器人后直接说队名和整场比分，支持简称、中文数字、批量提交和修改。
+- **积分与正确率**：每群独立计分，自动结算；积分榜展示胜负预测正确率和参与、结算场数。
+- **赛后自动发榜**：可按群启用，等当天全部竞猜比赛结束及结算后发送，跨午夜继续等待。
+- **机器人参赛**：可独立结合过往交手、近期表现和比赛信息预测，群成员无法修改机器人竞猜。
+- **内置控制台**：在 AstrBot 插件详情页查看赛程时间轴、竞猜、排行榜、任务与事件，并调整设置。
+- **Studio 图片主题**：炭黑与暖白两套风格，大队标、固定文字区域、状态配色；开赛提醒保留赔率和支持率双色对比条。
+
+## 效果展示
+
+以下为保存的历史赛事数据，展示图片效果，不是实时赛程。
+
+<details open>
+<summary>赛事日历</summary>
+
+![赛事日历](docs/examples/schedule.png)
+
+</details>
+
+<details>
+<summary>开赛提醒与支持率</summary>
+
+![开赛提醒](docs/examples/notice.png)
+
+</details>
+
+<details>
+<summary>完整战报（五张地图）</summary>
+
+![全场战报](docs/examples/report.png)
+
+</details>
 
 ## 安装
 
-1. 将插件目录放入 AstrBot 的 `plugins` 目录。
-2. 安装依赖：
+需要 **AstrBot >= 4.28.1、< 5** 和 **Python >= 3.12**。已验证 Linux / OneBot v11（`aiocqhttp`）；其他平台尚未完成完整测试。
+
+在 AstrBot 的“插件”页面选择“安装插件”，填入：
+
+```text
+https://github.com/Kelvin18710/astrbot_plugin_val_match
+```
+
+AstrBot 会根据 `requirements.txt` 安装 Python 依赖。基础查询不需要 AI；机器人预测和 AI 锐评使用 AstrBot 当前配置的模型提供商。
+
+### 图片字体
+
+图片需要中文字体。Debian / Ubuntu 或对应 Docker 容器内安装：
 
 ```bash
-pip install -r requirements.txt
+apt-get update
+apt-get install -y fonts-noto-cjk
 ```
 
-3. 重启 AstrBot。
-4. 到 WebUI 打开插件配置。
+默认中文字体位置为 `/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc`。Studio 在缺少 Inter 时回退到 Noto Sans CJK。字体必须安装在运行 AstrBot 的环境内。
 
-## 开箱即用推荐配置
+## 快速开始
 
-大多数用户保持默认值就能直接用：
+1. 在插件详情页打开 **赛事控制台**。
+2. 进入“设置”，勾选 **特别关心赛事**；需要推送时再选择目标群并启用对应开关。
+3. 在群里执行 `/val today` 或 `/val s`，确认数据与图片正常。
 
-| 配置项 | 推荐值 |
+竞猜需要另外启用“群内竞猜”并选择竞猜目标群。时区默认 `Asia/Shanghai`，可在设置中修改。
+
+## 群内竞猜
+
+群成员需要 **@机器人**，可以直接说：
+
+```text
+@机器人 今日竞猜
+@机器人 我猜 EDG 2比1 赢 PRX
+@机器人 把 EDG 那场改成 2:0
+@机器人 我猜 EDG 2:1 赢 PRX，FNC 2:0 赢 DRX
+@机器人 把 EDG 那场改成 2:0，然后把 FNC 那场改成 1:2
+@机器人 我的竞猜
+@机器人 积分榜
+@机器人 竞猜怎么玩
+```
+
+竞猜只开放 **今日比赛**，不支持提前竞猜未来赛程。比分是整场地图比分，例如 BO3 为 2:0、2:1 及反向比分；平局、单图回合比分和不符合赛制的比分会被拒绝。
+
+**开赛前 10 分钟封盘**，之后无法提交或修改；提前开赛也会封盘。每人每场保留最后一次有效竞猜。批量逐场反馈，一场非法或封盘不影响其他明确有效的竞猜；重复报同一场或不确定表达会要求澄清。
+
+每个成员初始 **0 分**，每群积分独立：
+
+| 结果 | 本场积分 |
+| --- | ---: |
+| 猜中胜队，比分未完全一致 | 2 |
+| 胜队和比分均命中 | 5 |
+| 胜队未命中 | 0 |
+
+**胜负正确率 = 猜中胜队的场数 / 本人参与且已结算的竞猜场数**。未参与、未结算比赛不计入分母，没有已结算竞猜时显示“暂无”。机器人按相同口径计分和统计。
+
+## 积分榜什么时候发送
+
+在控制台“积分榜播报”中选择：
+
+- **定时模式**：按设置的时间每日发送。
+- **赛后模式**：启用“比赛结束后自动发送积分榜”，选择对应竞猜群。所选群等待当天全部已确认竞猜比赛取得最终赛果、积分结算完成后发一次；其余群保留定时设置。
+
+无比赛当天不发赛后榜。跨午夜、比赛顺延和重载都会保留待处理比赛日；发送失败重试，确认成功后持久化去重。群成员可随时 @机器人查看即时积分榜。
+
+## 常用命令
+
+| 命令 | 用途 |
 | --- | --- |
-| `default_levels` | `S` |
-| `display_timezone` | `Asia/Shanghai` |
-| `include_completed` | `true` |
-| `fetch_bo_from_details` | `true` |
-| `image_day_offsets` | `-1,0,1` |
-| `enable_daily_push` | `false` |
+| `/val today` | 今日赛程 |
+| `/val tomorrow` | 明日赛程 |
+| `/val s` | 多日赛事日历图片 |
+| `/val progress` | 赛事积分榜或淘汰晋级图 |
+| `/val sync_events` | 同步可选赛事列表 |
+| `/val debug` | 查询数据源与配置状态 |
 
-配置完成后，先直接测试：
+完整命令与配置项见 [配置参考](docs/CONFIGURATION.md)。
 
-```text
-/val today
-/val s
-/val debug
+## 数据与运维
+
+竞猜、积分和发送记录保存在 AstrBot 的 `data/plugin_data/astrbot_plugin_val_match/predictions.sqlite3`，重载后保留。图片和网页缓存自动生成，不包含在发布包中。
+
+只有明确的竞猜、修改或查询意图才进入竞猜处理；询问“预测今年冠军”等普通讨论仍交给正常聊天。VLR 访问失败或无法确认比赛状态时，不保存未经核实的竞猜。
+
+## 开发与许可
+
+发布版通过本地回归测试，代码使用 Ruff 格式化：
+
+```bash
+python -m unittest discover -s tests
+ruff check .
+ruff format --check .
 ```
 
-## 首次使用步骤
+开发文件保留在仓库，插件 ZIP 通过 `.gitattributes` 排除测试和工具。更新内容见 [CHANGELOG](CHANGELOG.md)。
 
-### 1. 先确认基础查询正常
-
-依次测试：
-
-```text
-/val today
-/val tomorrow
-/val debug
-```
-
-如果 `/val today` 有返回，就说明主链路已经可用。
-
-### 2. 配置你关注的赛事
-
-如果你不想只按 `S` 级赛事过滤，而是想只看自己关心的联赛，推荐这样做：
-
-1. 先执行：
-
-```text
-/val sync_events
-```
-
-2. 执行完成后，重载插件，或者至少刷新一次插件配置页。
-3. 回到 WebUI，在 `关注赛事 preferred_tournaments` 中多选你关心的赛事。
-4. 保存配置并再次重载插件。
-
-常见选择例如：
-
-- `VCT 2026: Americas Stage 1`
-- `VCT 2026: China Stage 1`
-- `VCT 2026: EMEA Stage 1`
-- `VCT 2026: Pacific Stage 1`
-
-配置完成后：
-
-- `/val today` 会优先按关注赛事过滤
-- `/val s` 也会优先按关注赛事渲染图片
-
-### 3. 配置图片展示天数
-
-`image_day_offsets` 控制 `/val s` 展示哪些日期。
-
-示例：
-
-- `0`：只看今天
-- `-1,0,1`：昨天、今天、明天
-- `0,1,2`：今天、明天、后天
-- `-2,-1,0,1,2`：前后共 5 天
-
-注意：
-
-- 最多保留前 7 个偏移值
-- 没有比赛的日期也会显示占位块，不会直接消失
-
-### 4. 如果需要每日推送
-
-打开：
-
-- `enable_daily_push = true`
-
-并配置：
-
-| 配置项 | 说明 |
-| --- | --- |
-| `push_targets` | 每行一个目标 |
-| `push_time` | 推送时间，格式 `HH:MM` |
-
-示例：
-
-```text
-enable_daily_push = true
-push_time = 09:00
-push_targets =
-aiocqhttp:123456789
-```
-
-`push_targets` 支持两种写法：
-
-- 完整的 `unified_msg_origin`
-- 简写 `platform_id:group_id`
-
-配置完以后，可以先执行：
-
-```text
-/val push_test
-```
-
-这样不用等到定时点，也能先验证推送目标和消息发送是否正常。
-当前 `push_test` 和每日定时推送，发送的都是和 `/val s` 同一套赛程图片。
-
-## 指令说明
-
-### `/val today`
-
-查询今天比赛。
-
-特点：
-
-- 默认按 `default_levels` 过滤，默认是 `S`
-- 默认包含今天已经结束的比赛
-- 如果配置了关注赛事，则优先按关注赛事过滤
-
-### `/val tomorrow`
-
-查询明天比赛。
-
-### `/val date YYYY-MM-DD`
-
-查询指定日期比赛。
-
-示例：
-
-```text
-/val date 2026-04-28
-```
-
-### `/val level S`
-
-按等级查询今天比赛。
-
-示例：
-
-```text
-/val level S
-/val level A
-/val level S,A
-```
-
-注意：
-
-- 如果已经配置了关注赛事，这个命令会先按关注赛事筛，再按你手动传入的等级筛
-
-### `/val s`
-
-生成多日赛事图片。
-
-特点：
-
-- 默认展示昨天、今天、明天
-- 队伍显示全名和队标
-- 右侧显示赛事名、赛事阶段、赛事图标、等级
-- 区分已结束 / 进行中 / 未开始三种状态色
-- 空白日期会显示占位块
-
-### `/val sync_events`
-
-从 VLR 同步可选赛事列表到插件配置。
-
-适用场景：
-
-- 第一次配置关注赛事
-- 新赛季开始后刷新赛事列表
-
-注意：
-
-- 执行完后，要重载插件，或者刷新插件配置页，WebUI 才能看到新的可选赛事
-
-### `/val push_test`
-
-立即向 `push_targets` 发送一张赛程图片，用于测试定时推送。
-
-适用场景：
-
-- 你刚配置完推送目标
-- 你想确认机器人是否真的能发到目标群
-- 你不想等到正式推送时间
-- 你想确认图片推送是否正常
-
-### `/val debug`
-
-输出当前调试信息，适合排查：
-
-- 当前请求是否成功
-- 当前时区是否正确
-- 当前是否命中缓存
-- 当前默认等级过滤和关注赛事是否生效
-- 图片命令的日期范围是什么
-
-## 配置项说明
-
-### 核心配置
-
-| 配置项 | 默认值 | 说明 |
-| --- | --- | --- |
-| `default_levels` | `S` | 文本命令默认等级过滤 |
-| `preferred_tournaments` | `[]` | 关注赛事，多选 |
-| `image_day_offsets` | `-1,0,1` | `/val s` 的日期范围 |
-| `display_timezone` | `Asia/Shanghai` | 输出展示时区 |
-| `include_completed` | `true` | 文本查询时是否包含已结束比赛 |
-
-### 请求与缓存
-
-| 配置项 | 默认值 | 说明 |
-| --- | --- | --- |
-| `request_timeout_seconds` | `10` | HTTP 请求超时秒数 |
-| `retry_count` | `2` | 请求失败时的重试次数 |
-| `cache_ttl_seconds` | `300` | 赛程和详情缓存秒数 |
-| `max_matches_per_message` | `20` | 文本消息最多显示多少场 |
-| `fetch_bo_from_details` | `true` | 是否访问详情页补全 BO |
-| `max_detail_fetch_matches` | `12` | 一次最多补全多少场 BO |
-
-### VLR 相关
-
-| 配置项 | 默认值 | 说明 |
-| --- | --- | --- |
-| `vlr_api_url` | `https://vlrggapi.vercel.app` | 优先尝试的公开 API |
-| `vlr_web_base_url` | `https://www.vlr.gg` | VLR 网页地址 |
-| `vlr_schedule_pages` | `3` | 赛程页最多扫描页数 |
-| `vlr_results_pages` | `3` | 结果页最多扫描页数 |
-
-### 推送相关
-
-| 配置项 | 默认值 | 说明 |
-| --- | --- | --- |
-| `enable_daily_push` | `false` | 是否启用每日推送 |
-| `push_time` | `09:00` | 推送时间 |
-| `push_targets` | 空 | 推送目标列表 |
-
-## 时间与时区说明
-
-插件默认按 `Asia/Shanghai` 展示时间。
-
-当前时间处理策略：
-
-1. 优先读取 VLR 详情页展示出来的比赛时间
-2. 同时读取详情页中的 UTC 时间信息做校验
-3. 统一转换到 `display_timezone`
-4. 按转换后的日期归类到今天 / 明天 / 昨天
-
-这样做的目的，是尽量避免：
-
-- 代理 IP 所在地区导致网页时间偏掉
-- 仅靠网页列表页时间时出现日期归类错误
-
-如果你在中国使用，建议保持：
-
-```text
-display_timezone = Asia/Shanghai
-```
-
-## 数据源逻辑
-
-插件当前只使用 `VLR`。
-
-实际行为：
-
-1. 先尝试 `vlrggapi.vercel.app`
-2. 如果 API 不稳定，回退到 `www.vlr.gg` 页面解析
-
-默认情况下不需要额外配置。
-
-## 常见使用方案
-
-### 方案一：只看 S 级赛事
-
-保持默认配置即可：
-
-```text
-default_levels = S
-preferred_tournaments = []
-```
-
-### 方案二：只看四大 VCT 联赛
-
-先同步赛事列表，再在 WebUI 中选择：
-
-- `VCT 2026: Americas Stage 1`
-- `VCT 2026: China Stage 1`
-- `VCT 2026: EMEA Stage 1`
-- `VCT 2026: Pacific Stage 1`
-
-这时即使某些比赛等级标记不稳定，也能按赛事名称准确过滤。
-
-### 方案三：做群内每日提醒
-
-推荐配置：
-
-```text
-default_levels = S
-display_timezone = Asia/Shanghai
-enable_daily_push = true
-push_time = 09:00
-push_targets =
-aiocqhttp:123456789
-```
-
-配置完先执行一次：
-
-```text
-/val push_test
-```
-
-确认没问题后，再等正式定时推送。
-
-## 排查指南
-
-### `today` 查不到比赛
-
-先检查：
-
-1. 有没有配置 `preferred_tournaments`
-2. 配置的赛事名是不是当前确实有比赛
-3. `default_levels` 是否过滤得过严
-4. `/val debug` 里“过滤后比赛数量”是多少
-
-### 图片里某一天没有比赛
-
-这是正常的。
-
-现在 `/val s` 会保留空白日期，并显示：
-
-- `此日无关注比赛`
-
-如果你想扩大范围，可以把：
-
-```text
-image_day_offsets = -2,-1,0,1,2
-```
-
-### 时间不对
-
-先检查：
-
-```text
-display_timezone = Asia/Shanghai
-```
-
-然后执行：
-
-```text
-/val debug
-```
-
-确认：
-
-- 展示时区
-- 当前插件时间
-- VLR 页面时区推断
-- VLR 详情时间来源
-
-### `/val sync_events` 之后还是选不到赛事
-
-一般是：
-
-- 还没重载插件
-- WebUI 没刷新
-- 当前 VLR 页里暂时没有扫到你要的赛事
-
-可以重新执行一次：
-
-```text
-/val sync_events
-```
-
-然后重载插件，再回到 WebUI 查看。
-
-### 定时推送没发出来
-
-先检查：
-
-1. `enable_daily_push` 是否开启
-2. `push_targets` 是否填写正确
-3. `push_time` 是否是 `HH:MM`
-4. 机器人本身是否有往目标群发消息的权限
-
-然后先执行：
-
-```text
-/val push_test
-```
-
-如果这个都发不出去，优先先排查目标配置或机器人发信权限。
-
-## 目录说明
-
-```text
-astrbot_plugin_val_match/
-├── assets/                    # 图标等静态资源
-│   └── icon.png              # 当前占位图，可直接替换
-├── clients/                  # 数据源客户端
-├── artifacts/                # 运行期缓存与渲染产物
-├── main.py                   # AstrBot 插件入口
-├── render.py                 # 图片渲染
-├── _conf_schema.json         # WebUI 配置定义
-├── metadata.yaml             # 插件元信息
-└── requirements.txt          # 依赖
-```
-
-## 说明
-
-- 运行中生成的队标缓存和渲染图片会放在 `artifacts/`
-- 仓库已经通过 `.gitignore` 忽略这些运行期文件
-- 如果你要更换插件图标，优先替换 `assets/icon.png`
+插件代码采用 [MIT](LICENSE)。外部赛事素材、队标、选手与英雄图像的权利归各自权利人，详情见 [资源说明](assets/ATTRIBUTION.md)。

@@ -1,12 +1,16 @@
 name: astrbot_plugin_val_match
 display_name: VAL Match
+short_desc: 无畏契约赛程战报、群内比分竞猜与赛后积分榜
 author: kelvin
-desc: 无畏契约赛程插件，支持 VLR 数据源、关注赛事过滤、多日图片渲染与每日推送。
-version: 0.3.1
+desc: 无畏契约赛事插件，支持 VLR 赛程、积分榜、淘汰晋级图、战报、每日推送、群内比分竞猜和内置赛事控制台。
+version: 0.8.0
 repo: "https://github.com/Kelvin18710/astrbot_plugin_val_match"
-astrbot_version: ">=4.16,<5"
+astrbot_version: ">=4.28.1,<5"
 support_platforms:
   - aiocqhttp
-  - qq_official
-  - telegram
-  - kook
+tags:
+  - 游戏
+  - 无畏契约
+  - 赛事
+  - 竞猜
+  - 积分榜

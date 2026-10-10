@@ -1,4 +1,10 @@
-from .vlr import BaseMatchClient, MatchRecord, MatchSourceError, RequestDebugInfo, VlrClient
+from .vlr import (
+    BaseMatchClient,
+    MatchRecord,
+    MatchSourceError,
+    RequestDebugInfo,
+    VlrClient,
+)
 
 __all__ = [
     "BaseMatchClient",
