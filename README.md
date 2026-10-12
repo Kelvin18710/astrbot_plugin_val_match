@@ -1,15 +1,15 @@
 <div align="center">
 
-![VAL Match：比赛有人提醒，比分一起猜](docs/images/hero.svg)
+![VAL Match：比赛有人提醒，比分一起猜](https://raw.githubusercontent.com/Kelvin18710/astrbot_plugin_val_match/v0.8.2/docs/images/hero.png)
 
 **把无畏契约的赛程、战报和竞猜，带进你的群聊。**
 
 [![AstrBot](https://img.shields.io/badge/AstrBot-%E2%89%A54.28.1-526ad9)](https://astrbot.app)
 [![Release](https://img.shields.io/github/v/release/Kelvin18710/astrbot_plugin_val_match?color=e76f7d&label=release)](https://github.com/Kelvin18710/astrbot_plugin_val_match/releases/latest)
 [![Tests](https://github.com/Kelvin18710/astrbot_plugin_val_match/actions/workflows/test.yml/badge.svg)](https://github.com/Kelvin18710/astrbot_plugin_val_match/actions/workflows/test.yml)
-[![MIT](https://img.shields.io/badge/license-MIT-19876a)](LICENSE)
+[![MIT](https://img.shields.io/badge/license-MIT-19876a)](https://github.com/Kelvin18710/astrbot_plugin_val_match/blob/v0.8.2/LICENSE)
 
-[看效果](#先看看它能为你的群做什么) · [安装](#安装后先试一句) · [上手指南](docs/QUICKSTART.md) · [配置参考](docs/CONFIGURATION.md)
+[看效果](#先看看它能为你的群做什么) · [安装](#安装后先试一句) · [上手指南](https://github.com/Kelvin18710/astrbot_plugin_val_match/blob/v0.8.2/docs/QUICKSTART.md) · [配置参考](https://github.com/Kelvin18710/astrbot_plugin_val_match/blob/v0.8.2/docs/CONFIGURATION.md)
 
 </div>
 
@@ -28,16 +28,16 @@
 
 ### 一张图，把赛程说清楚
 
-![赛事日历：时间固定在左侧，两队横向对阵](docs/examples/schedule.png)
+![赛事日历：时间固定在左侧，两队横向对阵](https://raw.githubusercontent.com/Kelvin18710/astrbot_plugin_val_match/v0.8.2/docs/examples/schedule.png)
 
 ### 从赛前期待，到赛后复盘
 
-![开赛提醒：队标、赔率与支持率对比](docs/examples/notice.png)
+![开赛提醒：队标、赔率与支持率对比](https://raw.githubusercontent.com/Kelvin18710/astrbot_plugin_val_match/v0.8.2/docs/examples/notice.png)
 
 <details>
 <summary><strong>展开查看完整战报 · 五张地图与十名选手数据</strong></summary>
 
-![完整战报](docs/examples/report.png)
+![完整战报](https://raw.githubusercontent.com/Kelvin18710/astrbot_plugin_val_match/v0.8.2/docs/examples/report.png)
 
 </details>
 
@@ -82,7 +82,7 @@ apt-get install -y fonts-noto-cjk
 
 不知道时间怎么安排？可以这样搭配：**14:00 发赛程 → 今日竞猜紧随其后 → 全部比赛结束并结算后发积分榜**。时间可自由调整，赛后模式也会等待跨午夜的比赛。
 
-[跟着完整上手指南配置 →](docs/QUICKSTART.md)
+[跟着完整上手指南配置 →](https://github.com/Kelvin18710/astrbot_plugin_val_match/blob/v0.8.2/docs/QUICKSTART.md)
 
 ## 竞猜，说出你的比分就行
 
@@ -117,7 +117,7 @@ apt-get install -y fonts-noto-cjk
 
 赛程时间轴标出「现在」，用状态色区分未开始、进行中与已结束；竞猜、积分榜、待结算记录和设置都在 AstrBot 内查看。
 
-![使用指南：按需要选择功能并查看配置进度](docs/examples/guide.png)
+![使用指南：按需要选择功能并查看配置进度](https://raw.githubusercontent.com/Kelvin18710/astrbot_plugin_val_match/v0.8.2/docs/examples/guide.png)
 
 上图为首次使用界面示意。后台任务与事件记录按需展开，无需另外打开一个管理网站。
 
@@ -140,8 +140,8 @@ apt-get install -y fonts-noto-cjk
 - **没有 AI 模型能用吗？** 赛程、提醒、图片、成员竞猜和积分结算都能用；机器人独立预测需要模型，AI 战报锐评在不可用时回退到本地社区摘要。
 - **升级会清空积分吗？** 竞猜与积分保存在插件数据目录的 `predictions.sqlite3`，正常升级 / 重载会保留。不要删除该数据文件。
 
-更多问题见 [上手指南](docs/QUICKSTART.md) 和 [配置与命令参考](docs/CONFIGURATION.md)。遇到异常可在 [Issues](https://github.com/Kelvin18710/astrbot_plugin_val_match/issues) 提供版本、操作步骤和脱敏报错。
+更多问题见 [上手指南](https://github.com/Kelvin18710/astrbot_plugin_val_match/blob/v0.8.2/docs/QUICKSTART.md) 和 [配置与命令参考](https://github.com/Kelvin18710/astrbot_plugin_val_match/blob/v0.8.2/docs/CONFIGURATION.md)。遇到异常可在 [Issues](https://github.com/Kelvin18710/astrbot_plugin_val_match/issues) 提供版本、操作步骤和脱敏报错。
 
 ---
 
-赛程与赛果来自 **VLR.gg**，需要运行环境能访问数据源；展示与提醒以数据源同步状态为准。更新记录见 [CHANGELOG](CHANGELOG.md)。代码采用 [MIT](LICENSE)，外部赛事素材权利归各自权利人，见 [资源说明](assets/ATTRIBUTION.md)。
+赛程与赛果来自 **VLR.gg**，需要运行环境能访问数据源；展示与提醒以数据源同步状态为准。更新记录见 [CHANGELOG](https://github.com/Kelvin18710/astrbot_plugin_val_match/blob/v0.8.2/CHANGELOG.md)。代码采用 [MIT](https://github.com/Kelvin18710/astrbot_plugin_val_match/blob/v0.8.2/LICENSE)，外部赛事素材权利归各自权利人，见 [资源说明](https://github.com/Kelvin18710/astrbot_plugin_val_match/blob/v0.8.2/assets/ATTRIBUTION.md)。
