@@ -9,7 +9,7 @@
 [![Tests](https://github.com/Kelvin18710/astrbot_plugin_val_match/actions/workflows/test.yml/badge.svg)](https://github.com/Kelvin18710/astrbot_plugin_val_match/actions/workflows/test.yml)
 [![MIT](https://img.shields.io/badge/license-MIT-19876a)](https://github.com/Kelvin18710/astrbot_plugin_val_match/blob/v0.8.2/LICENSE)
 
-[看效果](#先看看它能为你的群做什么) · [安装](#安装后先试一句) · [上手指南](https://github.com/Kelvin18710/astrbot_plugin_val_match/blob/v0.8.2/docs/QUICKSTART.md) · [配置参考](https://github.com/Kelvin18710/astrbot_plugin_val_match/blob/v0.8.2/docs/CONFIGURATION.md)
+[看效果](#先看看它能为你的群做什么) · [全场赛果](#全场比赛赛果一张图复盘整场) · [安装](#安装后先试一句) · [上手指南](https://github.com/Kelvin18710/astrbot_plugin_val_match/blob/v0.8.2/docs/QUICKSTART.md) · [配置参考](https://github.com/Kelvin18710/astrbot_plugin_val_match/blob/v0.8.2/docs/CONFIGURATION.md)
 
 </div>
 
@@ -30,16 +30,21 @@
 
 ![赛事日历：时间固定在左侧，两队横向对阵](https://raw.githubusercontent.com/Kelvin18710/astrbot_plugin_val_match/v0.8.2/docs/examples/schedule.png)
 
-### 从赛前期待，到赛后复盘
+### 开赛提醒，看看双方的赛前支持率
 
 ![开赛提醒：队标、赔率与支持率对比](https://raw.githubusercontent.com/Kelvin18710/astrbot_plugin_val_match/v0.8.2/docs/examples/notice.png)
 
-<details>
-<summary><strong>展开查看完整战报 · 五张地图与十名选手数据</strong></summary>
+### 全场比赛赛果，一张图复盘整场
 
-![完整战报](https://raw.githubusercontent.com/Kelvin18710/astrbot_plugin_val_match/v0.8.2/docs/examples/report.png)
+谁赢了、每张地图怎么打、选手表现如何，整场结束后的战报放在一张图里：**系列赛总比分与胜队、各地图比分与选图方、地图时长，以及两队十名选手的整场数据**。
 
-</details>
+选手区保留头像、国家与使用英雄，展示 **Rating、ACS、K/D/A、K/D 差值、KAST、ADR、爆头率和首杀 / 首死**；底部可附带赛后锐评。
+
+下面是 **NRG vs FNATIC · BO5 打满五张地图** 的历史全场战报，展示从总比分到十名选手统计的完整布局。
+
+![全场比赛赛果：NRG 3:2 FNATIC，五张地图结果与两队十名选手整场数据](https://raw.githubusercontent.com/Kelvin18710/astrbot_plugin_val_match/v0.8.2/docs/examples/report.png)
+
+[查看高清全场赛果原图 →](https://raw.githubusercontent.com/Kelvin18710/astrbot_plugin_val_match/v0.8.2/docs/examples/report.png)
 
 图片为历史赛事样例，顶部封面为使用场景示意。支持 **Studio 炭黑 / 暖白** 两套主题。
 
