@@ -3,3 +3,6 @@ scripts/ export-ignore
 .github/ export-ignore
 .gitignore export-ignore
 pyproject.toml export-ignore
+
+# Promotional media is documentation, not part of the plugin installation.
+docs/promo/ export-ignore

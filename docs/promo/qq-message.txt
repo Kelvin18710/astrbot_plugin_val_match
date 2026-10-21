@@ -1,0 +1,9 @@
+给看瓦的群做了个小插件：VAL Match 🎮
+
+赛前自动发赛程，点表情选赢家；赛后发完整战报和积分榜。机器人也能自己预测、一起上榜，看看谁更懂比赛。
+
+只猜输赢，点另一队就能改选，开赛前 10 分钟截止。每项赛事单独计分。
+
+AstrBot 插件市场搜「VAL Match」就能找到。欢迎有观赛群的群主来试试，哪里不好用也欢迎直接反馈～
+
+https://cloud.astrbot.app/plugin/Kelvin18710/astrbot_plugin_val_match

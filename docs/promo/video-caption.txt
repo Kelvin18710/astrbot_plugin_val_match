@@ -1,0 +1,21 @@
+主标题：谁比机器人更懂瓦？我把竞猜搬进了 QQ 群
+
+备选标题：
+1. 点个表情就能猜胜队？机器人还会自己参赛
+2. 给观赛群做了个插件：赛程、竞猜、战报和积分榜都齐了
+3. 群友 vs 机器人：下一场比赛谁猜得更准？
+
+简介：
+VAL Match 是给无畏契约观赛群做的 AstrBot 插件。
+点表情选胜队，也能改选；机器人独立预测，赛后一起看积分榜。
+支持赛程自动推送、完整战报和赛事独立积分。
+开源免费，AstrBot 插件市场搜索「VAL Match」。
+
+点选适用于 QQ / NapCat。基础查询无需额外 API Key，机器人独立预测需配置模型。
+画面为功能演示：竞猜与成员数据为虚构样例，战报来自历史比赛；不代表真实预测成绩。
+
+建议封面：cover.jpg（横版）；share-poster.png（竖版图文）。
+建议标签：#无畏契约 #VALORANT #AstrBot #QQ机器人 #开源项目
+
+插件市场：https://cloud.astrbot.app/plugin/Kelvin18710/astrbot_plugin_val_match
+开源仓库：https://github.com/Kelvin18710/astrbot_plugin_val_match

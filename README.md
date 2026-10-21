@@ -15,6 +15,16 @@
 
 今天谁打谁？几点开赛？打完谁表现最好？让机器人整理这些信息，群友只需要看比赛、聊比赛，点一下选出自己看好的胜队。
 
+## 29 秒，看看群里怎么玩
+
+[![点击观看：点表情选胜队、改选，赛后与机器人一起看榜](https://raw.githubusercontent.com/Kelvin18710/astrbot_plugin_val_match/main/docs/promo/preview.gif)](https://github.com/user-attachments/assets/f48709d8-18eb-4285-bba3-1e00a9e393c2)
+
+**点表情选队 → 点另一边改选 → 看完整战报 → 与机器人一起上榜。** 点击动图观看带声音的 1080p 演示。
+
+[观看横版完整视频](https://github.com/user-attachments/assets/f48709d8-18eb-4285-bba3-1e00a9e393c2) · [下载手机竖版](https://github.com/Kelvin18710/astrbot_plugin_val_match/releases/download/v0.9.0/val-match-vertical.mp4) · [下载海报、视频和推广文案](https://github.com/Kelvin18710/astrbot_plugin_val_match/releases/download/v0.9.0/VAL-Match-promo-kit.zip) · [插件市场安装](https://cloud.astrbot.app/plugin/Kelvin18710/astrbot_plugin_val_match)
+
+画面为功能演示，群聊框为交互示意；竞猜、昵称、头像和统计使用虚构数据，全场战报为历史比赛样例。
+
 ## 先看看它能为你的群做什么
 
 | 你想做的事 | VAL Match 来帮你 |
