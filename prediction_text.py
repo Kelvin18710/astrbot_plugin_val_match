@@ -7,7 +7,7 @@ try:
 except ImportError:
     from predictions import team_names
 
-RULE = "猜中胜队得 2 分；同时猜中比分，额外得 3 分，合计 5 分。"
+RULE = "只猜胜负：猜中胜队得 2 分，猜错 0 分。历史比分竞猜按原规则保留。"
 VIEW = "📖 查看：@我说“我的竞猜”或者“积分榜”。"
 
 
@@ -20,11 +20,13 @@ def name_text(value):
     return " ".join(str(value or "群友").split())[:50]
 
 
-def my_predictions(name, rows, points, now, tz):
+def my_predictions(name, rows, points, now, tz, tournament=None):
     lines = [
         f"👤 {name_text(name)} · 我的竞猜",
         f"🏅 当前积分：{points} 分\n🎲 共参与 {len(rows)} 场比赛",
     ]
+    if tournament:
+        lines.insert(1, "🏟️ " + tournament)
     if not rows:
         lines.append(
             "还没有竞猜记录，第一场预测从这里开始吧。\n@我说“今日竞猜”查看今天的比赛。"
@@ -48,19 +50,26 @@ def my_predictions(name, rows, points, now, tz):
                 state = "🔒 已封盘 · 等待赛果"
             else:
                 state = f"🟢 截止 {datetime.fromisoformat(r['lock_at']).astimezone(tz):%m-%d %H:%M}，仍可修改"
+        pick = (
+            f"{r['team_a'] if r['a'] > r['b'] else r['team_b']} 胜"
+            if r.get("mode") == "winner"
+            else f"{r['team_a']} {r['a']} : {r['b']} {r['team_b']}"
+        )
         lines.append(
-            f"{i}. {short_team(r['team_a'])} vs {short_team(r['team_b'])}\n你的预测：{r['team_a']} {r['a']} : {r['b']} {r['team_b']}\n{state}{result}"
+            f"{i}. {short_team(r['team_a'])} vs {short_team(r['team_b'])}\n你的预测：{pick}\n{state}{result}"
         )
     if len(rows) > 20:
         lines.append("以上为最近 20 场竞猜。")
     lines.append(
-        "✏️ 修改：@我说“把队名那场改成 2:0”。\n多场修改可带上各场队名和新比分，用逗号或“然后”分开。\n比分需要符合该场赛制；开赛前 10 分钟封盘。"
+        "✏️ 修改：点比赛消息下方另一个胜队表情，或 @我说“把 EDG 那场改成 PRX 赢”。\n开赛前 10 分钟封盘。"
     )
     return "\n\n".join(lines)
 
 
-def leaderboard(group_name, rows, now):
+def leaderboard(group_name, rows, now, tournament=None):
     lines = [f"🏆 {group_name} · 竞猜积分榜", f"📅 {now:%m月%d日 %H:%M}"]
+    if tournament:
+        lines.insert(1, "🏟️ " + tournament + "\n各赛事独立计分 · 新赛事从 0 分开始")
     for i, r in enumerate(rows[:50]):
         rank = 1 + sum(x["points"] > r["points"] for x in rows)
         medal = {1: "🥇", 2: "🥈", 3: "🥉"}.get(rank, f"{rank}.")
@@ -85,9 +94,13 @@ def leaderboard(group_name, rows, now):
         + "\n尚未参与的成员初始积分为 0 分。"
     )
     lines.append(
-        "📊 正确率仅统计已结算竞猜，猜中胜队即算正确，无需比分完全一致。\n🎯 "
+        "📊 正确率仅统计"
+        + ("本赛事的" if tournament else "")
+        + "已结算竞猜，猜中胜队即算正确，无需比分完全一致。\n🎯 "
         + RULE
         + "\n"
         + VIEW
     )
+    if tournament:
+        lines.append("🗂️ 历史成绩保留，可 @我说“冠军赛积分榜”或带上完整赛事名查询。")
     return "\n\n".join(lines)

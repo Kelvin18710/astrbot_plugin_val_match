@@ -5,6 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
+from astrbot.api.event import MessageChain
 from astrbot.api.message_components import At
 from test_predictions import NOW
 
@@ -52,6 +53,7 @@ class FeatureTests(unittest.IsolatedAsyncioTestCase):
             get_sender_id=lambda: "user",
             get_sender_name=lambda: "群友",
             plain_result=lambda s: s,
+            image_result=lambda path: MessageChain().file_image(path),
         )
 
     async def call(self, event):
@@ -66,11 +68,13 @@ class FeatureTests(unittest.IsolatedAsyncioTestCase):
             self.p.prediction_store.predictions("default:GroupMessage:42")[0]["b"], 0
         )
         r = await self.call(self.event("我的竞猜"))
-        self.assertIn("2 : 0", r[0])
+        self.assertIn("EDward Gaming 胜", r[0])
+        self.assertNotIn("2 : 0", r[0])
         self.assertIn("群友 · 我的竞猜", r[0])
         self.assertIn("当前积分", r[0])
         r = await self.call(self.event("积分榜"))
-        self.assertIn("0 分", r[0])
+        self.assertEqual(r[0].chain[0].type, "Image")
+        self.assertIn("0 分", self.p._rank_text("default:GroupMessage:42"))
         r = await self.call(self.event("竞猜怎么玩"))
         self.assertIn("10 分钟", r[0])
 
@@ -83,7 +87,7 @@ class FeatureTests(unittest.IsolatedAsyncioTestCase):
             self.p.prediction_store.predictions("default:GroupMessage:42", "user")[0][
                 "b"
             ],
-            1,
+            0,
         )
         reply = await self.call(self.event("你的竞猜"))
         self.assertIn("🤖 Mira", reply[0])
@@ -159,7 +163,12 @@ class FeatureTests(unittest.IsolatedAsyncioTestCase):
             event.stop_event = Mock()
             with self.subTest(text=text):
                 reply = await self.call(event)
-                self.assertIn(phrase, reply[0])
+                self.assertIn(
+                    phrase,
+                    self.p._rank_text("default:GroupMessage:42")
+                    if text == "帮我看看积分榜"
+                    else reply[0],
+                )
                 event.stop_event.assert_called_once()
 
     async def test_failed_or_invalid_modification_preserves_previous(self):
@@ -172,7 +181,7 @@ class FeatureTests(unittest.IsolatedAsyncioTestCase):
         r = await self.call(self.event("改成2:0"))
         self.assertIn("没有修改", r[0])
         self.assertEqual(
-            self.p.prediction_store.predictions("default:GroupMessage:42")[0]["b"], 1
+            self.p.prediction_store.predictions("default:GroupMessage:42")[0]["b"], 0
         )
 
     async def test_live_detail_closes_early_and_upcoming_countdown_is_accepted(self):
@@ -197,7 +206,7 @@ class FeatureTests(unittest.IsolatedAsyncioTestCase):
         r = await self.call(self.event("改成2:0"))
         self.assertIn("封盘", r[0])
         self.assertEqual(
-            self.p.prediction_store.predictions("default:GroupMessage:42")[0]["b"], 1
+            self.p.prediction_store.predictions("default:GroupMessage:42")[0]["b"], 0
         )
 
     async def test_failed_send_never_marks_success(self):
@@ -218,14 +227,19 @@ class FeatureTests(unittest.IsolatedAsyncioTestCase):
         await self.call(self.event("竞猜EDG2:0"))
         self.p.prediction_store.settle("123456", 2, 1)
         reply = await self.call(self.event("积分榜"))
-        self.assertIn("胜负正确率：100.0%（猜中 1/1 场）", reply[0])
-        self.assertIn("无需比分完全一致", reply[0])
+        self.assertEqual(reply[0].chain[0].type, "Image")
+        self.assertIn(
+            "胜负正确率：100.0%（猜中 1/1 场）",
+            self.p._rank_text("default:GroupMessage:42"),
+        )
+        self.assertIn("无需比分完全一致", self.p._rank_text("default:GroupMessage:42"))
         self.p.context = SimpleNamespace(send_message=AsyncMock(return_value=True))
         await self.p._broadcast_prediction(
             "default:GroupMessage:42", "积分", scheduled=True
         )
         chain = self.p.context.send_message.call_args.args[1]
-        self.assertIn("胜负正确率：100.0%（猜中 1/1 场）", chain.chain[0].text)
+        self.assertEqual(chain.chain[0].type, "Image")
+        self.assertFalse(any(c.type == "Plain" for c in chain.chain))
 
     def test_settings_validation(self):
         self.p.plugin_root = Path(__file__).resolve().parent.parent

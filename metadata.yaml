@@ -1,9 +1,9 @@
 name: astrbot_plugin_val_match
 display_name: VAL Match
-short_desc: 把无畏契约赛程、战报与比分竞猜带进群聊
+short_desc: 把无畏契约赛程、战报与胜负竞猜带进群聊
 author: kelvin
-desc: 比赛有人提醒，比分一起猜。查询无畏契约赛程，订阅开赛提醒与完整战报；群友 @机器人用自然语言猜比分、批量修改，赛后自动结算积分和胜负正确率。内置赛程时间轴与使用指南，按需配置赛事、接收群和赛后积分榜。基础查询无需额外 API Key。
-version: 0.8.2
+desc: 比赛有人提醒，胜队一起选。查询无畏契约赛程，订阅开赛提醒与完整战报；群友点表情选胜队，也能 @机器人自然语言参与和批量修改，赛后自动结算积分和胜负正确率。内置赛程时间轴与使用指南，按需配置赛事、接收群和赛后积分榜。基础查询无需额外 API Key。
+version: 0.9.0
 repo: "https://github.com/Kelvin18710/astrbot_plugin_val_match"
 astrbot_version: ">=4.28.1,<5"
 support_platforms:

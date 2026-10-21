@@ -186,10 +186,10 @@ class BotTests(unittest.IsolatedAsyncioTestCase):
         p.prediction_store.settle("123456", 2, 1)
         self.assertFalse(p.prediction_store.settle("123456", 2, 1))
         rank = p.prediction_store.leaderboard(GROUP)
-        self.assertEqual(rank[0]["points"], 5)
+        self.assertEqual(rank[0]["points"], 2)
         self.assertTrue(rank[0]["is_bot"])
 
-    async def test_sweep_prediction_preserved_and_daily_message_has_score_without_reason(
+    async def test_legacy_model_response_becomes_winner_without_public_score_or_reason(
         self,
     ):
         p = self.p
@@ -198,18 +198,32 @@ class BotTests(unittest.IsolatedAsyncioTestCase):
         )
         await p._ensure_bot_predictions()
         entry = p.prediction_store.predictions(GROUP)[0]
-        self.assertEqual((entry["a"], entry["b"]), (2, 0))
+        self.assertEqual((entry["a"], entry["b"]), (1, 0))
+        self.assertEqual(entry["mode"], "winner")
         prompt = p.context.llm_generate.call_args.kwargs["system_prompt"]
-        self.assertIn("不能以保守为由一律选2:1", prompt)
-        self.assertIn("2:0", prompt)
+        self.assertIn("只选择胜队", prompt)
+        self.assertIn("不预测地图比分", prompt)
         info = p._bot_match_info(GROUP, "123456")
         self.assertTrue(info["reason"])
         text = p._prediction_list_text(GROUP)
-        self.assertIn("🤖 Mira 的预测：EDG 2 : 0 PRX", text)
+        self.assertIn("🤖 Mira 选 EDG 胜", text)
+        self.assertNotIn("2 : 0", text)
         self.assertNotIn("依据：", text)
         self.assertNotIn(info["reason"], text)
         await p._ensure_bot_predictions()
         p.context.llm_generate.assert_awaited_once()
+
+    async def test_new_winner_response_is_stored_and_scores_two_without_map_bonus(self):
+        p = self.p
+        p.context.llm_generate.return_value = SimpleNamespace(
+            completion_text='{"winner":"b","reason":"近期表现判断"}'
+        )
+        await p._ensure_bot_predictions()
+        entry = p.prediction_store.predictions(GROUP)[0]
+        self.assertEqual((entry["a"], entry["b"], entry["mode"]), (0, 1, "winner"))
+        self.assertIn("Mira 选 PRX 胜", p._prediction_list_text(GROUP))
+        p.prediction_store.settle("123456", 0, 2)
+        self.assertEqual(p.prediction_store.leaderboard(GROUP)[0]["points"], 2)
 
     async def test_no_head_to_head_uses_recent_form_and_still_predicts(self):
         p = self.p
@@ -285,7 +299,7 @@ class BotTests(unittest.IsolatedAsyncioTestCase):
         await p._ensure_bot_predictions()
         p.context.llm_generate.assert_awaited_once()
         self.assertEqual(len(p.prediction_store.predictions(GROUP)), 1)
-        self.assertEqual(p._bot_match_info(GROUP, "123456")["a"], 2)
+        self.assertEqual(p._bot_match_info(GROUP, "123456")["a"], 1)
         self.assertEqual(p._bot_match_info("", "123456")["state"], "pending")
 
     async def test_commit_failure_retains_generated_pick_then_retries_same(self):
@@ -360,5 +374,5 @@ class BotTests(unittest.IsolatedAsyncioTestCase):
             ],
             NOW,
         )
-        for mark in ["🥇", "🥈", "🥉", "🤖 Mira", "合计 5 分"]:
+        for mark in ["🥇", "🥈", "🥉", "🤖 Mira", "猜中胜队得 2 分"]:
             self.assertIn(mark, rank)

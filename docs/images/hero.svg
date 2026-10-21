@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="340" viewBox="0 0 1200 340" role="img" aria-labelledby="title desc">
-  <title id="title">VAL Match — 比赛有人提醒，比分一起猜</title>
-  <desc id="desc">炭黑色封面，右侧以 EDG 对阵 PRX 为示意，展示群聊比分竞猜。</desc>
+  <title id="title">VAL Match — 比赛有人提醒，胜队一起选</title>
+  <desc id="desc">炭黑色封面，右侧以 EDG 对阵 PRX 为示意，展示群聊胜负竞猜。</desc>
   <defs><linearGradient id="bg" x2="1" y2="1"><stop stop-color="#171b24"/><stop offset="1" stop-color="#0c1017"/></linearGradient></defs>
   <rect width="1200" height="340" rx="22" fill="url(#bg)"/>
   <path d="M840 0 680 340M1040 0 880 340M1200 70 1070 340" stroke="#ffffff" stroke-opacity=".035"/>
@@ -8,7 +8,7 @@
     <rect x="48" y="45" width="6" height="25" rx="3" fill="#eb7e89"/>
     <text x="68" y="65" fill="#f8f3ed" font-size="23" font-weight="750" letter-spacing="3">VAL MATCH</text>
     <text x="48" y="142" fill="#f8f3ed" font-size="40" font-weight="700">比赛有人提醒，</text>
-    <text x="48" y="195" fill="#f8f3ed" font-size="40" font-weight="700">比分一起猜。</text>
+    <text x="48" y="195" fill="#f8f3ed" font-size="40" font-weight="700">胜队一起选。</text>
     <text x="48" y="236" fill="#a5acbc" font-size="17">赛程 · 开赛提醒 · 完整战报 · 群内竞猜</text>
     <rect x="48" y="269" width="118" height="31" rx="15" fill="#eb7e89" fill-opacity=".13"/>
     <text x="107" y="290" text-anchor="middle" fill="#eb9da5" font-size="12" letter-spacing="1">FOR ASTRBOT</text>
@@ -23,8 +23,8 @@
     <text x="990" y="132" fill="#8592a7" font-size="12">VS</text>
     <text x="1051" y="135" fill="#f8f3ed" font-size="28" font-weight="750">PRX</text>
     <rect x="726" y="178" width="398" height="48" rx="10" fill="#121923"/>
-    <text x="743" y="207" fill="#e5eaf5" font-size="16">@机器人 我猜 EDG 2比1 赢 PRX</text>
+    <text x="743" y="207" fill="#e5eaf5" font-size="16">点对应表情，预测该队获胜</text>
     <circle cx="732" cy="258" r="4" fill="#85c5ae"/>
-    <text x="745" y="263" fill="#a5cbbb" font-size="12">胜队命中 2 分 · 比分也命中 5 分</text>
+    <text x="745" y="263" fill="#a5cbbb" font-size="12">猜中胜队 +2 分 · 每场二选一</text>
   </g>
 </svg>

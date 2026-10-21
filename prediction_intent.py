@@ -32,7 +32,11 @@ def prediction_intent(text, has_score=False, teams=()):
         )
         if not explicit and not view:
             return None
-        if re.search(r"冠军|夺冠|赛区排名|世界排名", text) and not explicit:
+        if (
+            re.search(r"冠军|夺冠|赛区排名|世界排名", text)
+            and not explicit
+            and not view
+        ):
             return None
     if (
         re.search(r"竞猜", text)
@@ -40,6 +44,8 @@ def prediction_intent(text, has_score=False, teams=()):
         and not has_score
     ):
         return "help"
+    if re.search(BOT_REFERENCE, text) and re.search(r"改|修改|更改|调整", text):
+        return "bot_change"
     if not has_score:
         if re.search(r"我的(?:竞猜|预测)|我(?:猜|押)了什么", text):
             return "mine"
@@ -54,6 +60,19 @@ def prediction_intent(text, has_score=False, teams=()):
             text,
         ) or re.fullmatch(r"竞猜[呢啊吧?？。！!]*", text):
             return "list"
+        if any(
+            re.search(team_pattern(alias), text.casefold())
+            for team in teams
+            for alias in team_names(team)
+        ):
+            if re.search(r"吗|么|昨天|昨日|已经|赛果|结果|如果|假如|可能", text):
+                return None
+            if re.search(
+                r"^(?:请|帮我|给我|我|把|将|改|修改|更改|调整|竞猜|猜|押|看好|选)", text
+            ) and re.search(r"我猜|我押|竞猜|改成|改为|改选|看好|选|预测", text):
+                return "submit"
+            if re.search(r"赢|胜|获胜|输|负", text):
+                return "submit"
         if re.search(r"(?:我要|我想|帮我|给我|参加|参与).*竞猜", text):
             return "help"
         return None

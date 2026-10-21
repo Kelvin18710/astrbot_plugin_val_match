@@ -15,6 +15,8 @@ from astrbot.core.utils.astrbot_path import get_astrbot_plugin_data_path
 
 try:
     from .bot_predictions import BotPredictionFeature
+    from .click_predictions import ClickPredictionFeature
+    from .prediction_images import PredictionImages
     from .prediction_intent import prediction_intent
     from .prediction_text import (
         RULE,
@@ -28,13 +30,15 @@ try:
         PredictionStore,
         best_of,
         parse_score,
-        resolve_prediction,
         resolve_prediction_match,
-        split_prediction_requests,
+        resolve_winner_prediction,
+        split_winner_requests,
         validate_batch_request,
     )
 except ImportError:
     from bot_predictions import BotPredictionFeature
+    from click_predictions import ClickPredictionFeature
+    from prediction_images import PredictionImages
     from prediction_intent import prediction_intent
     from prediction_text import (
         RULE,
@@ -48,26 +52,26 @@ except ImportError:
         PredictionStore,
         best_of,
         parse_score,
-        resolve_prediction,
         resolve_prediction_match,
-        split_prediction_requests,
+        resolve_winner_prediction,
+        split_winner_requests,
         validate_batch_request,
     )
 
 PLUGIN = "astrbot_plugin_val_match"
 HELP = (
-    "🎮 竞猜上手 · 说一个比分就能参与\n\n"
-    "① 先看比赛\n@我说“今日竞猜”，查看队伍和截止时间。\n\n"
-    "② 报出比分\n例如 @我说“我猜 EDG 2比1 赢 PRX”。\n队名以今日比赛为准，猜的是整场地图比分。\n\n"
-    "③ 改主意也没关系\n@我说“把 EDG 那场改成 2:0”。\n截止前可修改，以最后一次有效预测为准。\n\n"
-    "④ 随时看记录和排名\n@我说“我的竞猜”或者“积分榜”。\n\n"
-    "🏅 猜中胜队得 2 分，比分也命中共得 5 分；胜队没猜中得 0 分。每人初始 0 分，各群独立。\n"
-    "🔒 只猜今日比赛，开赛前 10 分钟封盘；提前开赛也会封盘。BO3 可填 2:0、2:1 或反向比分，不能填单图 13:8。\n\n"
-    "🧾 一次报多场也可以：@我说“我猜 EDG 2:1 赢 PRX，FNC 2:0 赢 DRX”。修改同样支持，逐场反馈，一场出错不影响其他有效竞猜。"
+    "🎮 胜负竞猜 · 选一队就行\n\n"
+    "点比赛消息下方的表情选胜队，点另一个可改选。\n"
+    "也可 @我说‘我猜 EDG 赢’或‘把 EDG 那场改成 PRX 赢’。\n\n"
+    "🏅 猜中 +2 分，猜错 0 分；只猜胜负，不用填比分。\n"
+    "🔒 只开放今日比赛，开赛前 10 分钟封盘，提前开赛也会封盘。\n"
+    "📖 @我说‘我的竞猜’或‘积分榜’查看。各群、各赛事独立计分，历史成绩保留。\n"
+    "🧾 多场可一起说：‘我猜 EDG 赢，FNC 赢’；修改也可带上各场队名。\n"
+    "以最后一次保存为准；取消表情不撤销竞猜。"
 )
 
 
-class PredictionFeature(BotPredictionFeature):
+class PredictionFeature(ClickPredictionFeature, BotPredictionFeature, PredictionImages):
     def _init_predictions(self):
         self.prediction_store = PredictionStore(
             Path(get_astrbot_plugin_data_path()) / PLUGIN / "predictions.sqlite3"
@@ -88,6 +92,8 @@ class PredictionFeature(BotPredictionFeature):
             ("refresh", self.page_refresh, ["POST"]),
             ("broadcast", self.page_broadcast, ["POST"]),
             ("events/sync", self.page_sync_events, ["POST"]),
+            ("click/demo", self.page_click_demo, ["POST"]),
+            ("click/status", self.page_click_status, ["GET"]),
         ]:
             self.context.register_web_api(
                 f"/{PLUGIN}/{endpoint}", handler, methods, endpoint
@@ -146,9 +152,11 @@ class PredictionFeature(BotPredictionFeature):
                     self._parse_push_time(self.config.get(key)),
                     tzinfo=now.tzinfo,
                 )
-                if now < scheduled:
-                    continue
                 for group in self.prediction_targets:
+                    if now < scheduled and not (
+                        kind == "竞猜" and self._prediction_follows_schedule(group)
+                    ):
+                        continue
                     try:
                         await self._deliver_scheduled_prediction(group, kind)
                     except asyncio.CancelledError:
@@ -198,6 +206,8 @@ class PredictionFeature(BotPredictionFeature):
                 day, "赛后积分", group
             ) or not self.prediction_store.rank_day_ready(day, group):
                 return
+            if not await self._rank_reports_ready(group, day):
+                return
             return await self._broadcast_prediction(
                 group,
                 "积分",
@@ -206,6 +216,57 @@ class PredictionFeature(BotPredictionFeature):
                 delivery_day=day,
                 rank_day=day,
             )
+
+    async def _rank_reports_ready(self, group, day):
+        if not self.special_report_enabled or group not in self.special_push_targets:
+            return True
+        try:
+            from .clients.vlr import MatchRecord
+        except ImportError:
+            from clients.vlr import MatchRecord
+        batch = next(
+            (
+                b
+                for b in self.prediction_store.pending_rank_days(group)
+                if b["day"] == day
+            ),
+            None,
+        )
+        if not batch:
+            return False
+        if not hasattr(self, "_special_state"):
+            self._special_state = {}
+        for row in self.prediction_store.matches():
+            if row["match_id"] not in batch[
+                "match_ids"
+            ] or self.prediction_store.report_delivered(group, row["match_id"]):
+                continue
+            metadata = self.prediction_store.match_metadata(row["match_id"])
+            record = MatchRecord(
+                row["match_id"],
+                row["day"],
+                datetime.fromisoformat(row["start_at"]).strftime("%H:%M"),
+                "已结束",
+                row["team_a"],
+                row["team_b"],
+                f"{row['result_a']}:{row['result_b']}",
+                metadata.get("tournament", ""),
+                metadata.get("schedule", ""),
+                "",
+                f"Bo{row['bo']}",
+                "VLR",
+                {},
+            )
+            key = self._match_state_key(record)
+            state = self._special_state.setdefault(
+                key, {"created_at": self._now_in_display_timezone()}
+            )
+            state.update(match=record, start_sent=True)
+            await self._check_special_match_result(record, state)
+        return all(
+            self.prediction_store.report_delivered(group, mid)
+            for mid in batch["match_ids"]
+        )
 
     def _prediction_follows_schedule(self, group):
         return (
@@ -318,6 +379,14 @@ class PredictionFeature(BotPredictionFeature):
         self.prediction_store.sync_match(
             match.match_id, match.team_a, match.team_b, bo, start, match.status
         )
+        self.prediction_store.set_match_metadata(
+            match.match_id,
+            {
+                "tournament": match.tournament_name,
+                "schedule": match.schedule_name,
+                "event_href": (match.raw or {}).get("event_href") or None,
+            },
+        )
 
     async def _verify_prediction_match(self, row):
         """Refresh detail before every write: early LIVE and changed schedules close safely."""
@@ -393,7 +462,7 @@ class PredictionFeature(BotPredictionFeature):
             bot = self._bot_match_info(group, m["match_id"])
             if bot:
                 if bot["state"] == "ready":
-                    text += f"\n🤖 {bot['name']} 的预测：{short_team(m['team_a'])} {bot['a']} : {bot['b']} {short_team(m['team_b'])}"
+                    text += f"\n🤖 {bot['name']} 选 {short_team(m['team_a'] if bot['a'] > bot['b'] else m['team_b'])} 胜"
             lines.append(text)
         if not rows:
             lines.append("今日暂无已确认赛制和时间的特别关心比赛。")
@@ -408,20 +477,143 @@ class PredictionFeature(BotPredictionFeature):
         )
         if available:
             a, b = short_team(available["team_a"]), short_team(available["team_b"])
-            win = available["bo"] // 2 + 1
             lines.append(
-                f"💬 参与：@我说“我猜 {a} {win}比{1 if win > 1 else 0} 赢 {b}”。\n✏️ 修改：@我说“把 {a} 那场改成 {win}:0”。"
+                f"💬 参与：@我说“我猜 {a} 赢”。\n✏️ 修改：@我说“把 {a} 那场改成 {b} 赢”。"
+            )
+        if group in self.click_prediction_targets:
+            lines.append(
+                "🖱️ 本群也支持点选：直接点比赛消息下方的表情选胜队，点另一个即可改选，无需打字或 @。"
             )
         lines.append(
-            "🧾 多场可一起说：带上各场队名和比分，用逗号或“然后”分开；修改也支持。\n🔒 开赛前 10 分钟封盘，之后不能竞猜或修改。\n"
+            "🧾 多场可一起说：带上各场队名和胜队，用逗号或“然后”分开；修改也支持。\n🔒 开赛前 10 分钟封盘，之后不能竞猜或修改。\n"
             + VIEW
         )
         return "\n\n".join(lines)
 
-    def _rank_text(self, group):
-        rows = self.prediction_store.leaderboard(group)
+    def _prediction_tournaments(self):
+        selected = [
+            self.prediction_store.ensure_tournament(n)["tournament_id"]
+            for n in self.preferred_tournaments
+        ]
+        rows = self.prediction_store.tournaments()
+        rows = [r for r in rows if r["match_count"] or r["tournament_id"] in selected]
+        if not rows:
+            rows = [{**self.prediction_store.tournament("legacy"), "match_count": 0}]
+        for row in rows:
+            row["current"] = row["tournament_id"] in selected
+        return sorted(rows, key=lambda r: not r["current"])
+
+    def _view_tournament_ids(self, text=""):
+        options = self._prediction_tournaments()
+        cleaned = re.sub(r"\[CQ:at,[^\]]+\]|\[At:[^\]]+\]", "", text)
+        cleaned = re.sub(
+            r"我的竞猜|我的预测|你的竞猜|你的预测|机器人的?竞猜|机器人的?预测|竞猜积分榜|竞猜排行榜|积分排行榜|积分排名|积分排行|积分情况|积分多少|积分榜|排行榜|我的积分|查看|看看|查一下|查询|显示|帮我|给我|请|我想|我猜了什么|我押了什么|当前|本赛事|本群|赛事",
+            "",
+            cleaned,
+        )
+        cleaned = re.sub(
+            r"群里的?|群内的?|群成员|我们群的?|咱们群的?|记录|情况|一下", "", cleaned
+        )
+
+        def normalize(s):
+            return re.sub(r"[\W_]+", "", s).casefold()
+
+        keyword = normalize(cleaned).strip("呢啊吧")
+        if keyword in {"积分", "排名", "排行", "群积分"}:
+            keyword = ""
+        if keyword == "历史":
+            archived = [
+                r["tournament_id"]
+                for r in options
+                if not r["current"] and r["match_count"]
+            ]
+            return archived or [r["tournament_id"] for r in options]
+        if keyword:
+            candidates = []
+            for row in options:
+                aliases = [normalize(row["name"])]
+                if "champions" in row["name"].casefold():
+                    year = "".join(re.findall(r"20\d\d", row["name"]))
+                    aliases += [
+                        "冠军赛",
+                        "全球冠军赛",
+                        "冠军赛" + year,
+                        year + "冠军赛",
+                    ]
+                if any(s in row["name"].casefold() for s in ("threshold", "ascension")):
+                    aliases += ["晋升赛", "晋级赛"]
+                if any(
+                    keyword == a or (len(keyword) >= 2 and keyword in a)
+                    for a in aliases
+                ):
+                    candidates.append(row["tournament_id"])
+            if len(candidates) == 1:
+                return candidates
+            hint = "、".join(r["name"] for r in options)
+            raise ValueError(
+                ("赛事不够明确" if candidates else "没有找到这项赛事的竞猜榜单")
+                + "。请带上完整赛事名，例如“VCT China 2026: Threshold 积分榜”。可查看："
+                + hint
+            )
+        current = [r["tournament_id"] for r in options if r["current"]]
+        if current:
+            return current
+        today = {
+            m["tournament_id"]
+            for m in self.prediction_store.matches(
+                self._today_in_display_timezone().isoformat()
+            )
+        }
+        return [r["tournament_id"] for r in options if r["tournament_id"] in today] or [
+            options[0]["tournament_id"]
+        ]
+
+    def _rank_text(self, group, tournament_id=None, day=None, text=""):
+        if tournament_id:
+            event = self.prediction_store.tournament(tournament_id)
+            if not event:
+                raise ValueError("请选择有效的赛事。")
+            ids = [event["tournament_id"]]
+        else:
+            ids = (
+                self.prediction_store.rank_day_tournaments(day, group)
+                if day
+                else self._view_tournament_ids(text)
+            )
         name = getattr(self, "_prediction_groups", {}).get(group, "本群")
-        return leaderboard(name, rows, self._now_in_display_timezone())
+        return "\n\n──────────\n\n".join(
+            leaderboard(
+                name,
+                self.prediction_store.leaderboard(group, tid),
+                self._now_in_display_timezone(),
+                self.prediction_store.tournament(tid)["name"],
+            )
+            for tid in ids
+        )
+
+    def _my_prediction_text(self, group, user, name, text):
+        boards = []
+        for tid in self._view_tournament_ids(text):
+            rows = self.prediction_store.predictions(group, user, tid)
+            points = next(
+                (
+                    r["points"]
+                    for r in self.prediction_store.leaderboard(group, tid)
+                    if r["user_id"] == user
+                ),
+                0,
+            )
+            boards.append(
+                my_predictions(
+                    name,
+                    rows,
+                    points,
+                    self._now_in_display_timezone(),
+                    self._get_display_tz(),
+                    self.prediction_store.tournament(tid)["name"],
+                )
+            )
+        return "\n\n──────────\n\n".join(boards)
 
     async def _save_member_prediction(self, group, user, match, a, b):
         async with self._prediction_lock:
@@ -434,7 +626,13 @@ class PredictionFeature(BotPredictionFeature):
             if updated["day"] != self._today_in_display_timezone().isoformat():
                 raise ValueError("这场比赛的日期已变更，目前只支持今天的比赛。")
             changed = self.prediction_store.submit(
-                group, user, match["match_id"], a, b, self._now_in_display_timezone()
+                group,
+                user,
+                match["match_id"],
+                a,
+                b,
+                self._now_in_display_timezone(),
+                mode="winner",
             )
         return changed, updated
 
@@ -458,7 +656,7 @@ class PredictionFeature(BotPredictionFeature):
                     raise ValueError("机器人的预测独立生成，不能由群成员修改。")
                 # Each batch entry needs its own match, never the user's last pick.
                 entry["match"] = resolve_prediction_match(clause, rows)[0]
-                match, a, b = resolve_prediction(clause, rows)
+                match, a, b = resolve_winner_prediction(clause, rows)
                 entry.update(match=match, a=a, b=b)
             except ValueError as exc:
                 entry["error"] = str(exc)
@@ -467,7 +665,7 @@ class PredictionFeature(BotPredictionFeature):
         for e in entries:
             if "match" in e and ids.count(e["match"]["match_id"]) > 1:
                 e["error"] = (
-                    "同一句里多次提到这场比赛，请只保留一个确定的比分；本场没有修改。"
+                    "同一句里多次提到这场比赛，请只保留一个确定的胜队；本场没有修改。"
                 )
         lines, saved = [], 0
         for i, e in enumerate(entries, 1):
@@ -482,7 +680,7 @@ class PredictionFeature(BotPredictionFeature):
                         self._get_display_tz()
                     )
                     lines.append(
-                        f"{i}. {'✏️ 已修改' if changed else '✅ 已提交'}\n{m['team_a']} {e['a']} : {e['b']} {m['team_b']}\n🔒 截止 {cutoff:%m-%d %H:%M}（{self.display_timezone}）"
+                        f"{i}. {'✏️ 已修改' if changed else '✅ 已提交'}\n{m['team_a']} vs {m['team_b']}\n🏁 预测胜队：{m['team_a'] if e['a'] > e['b'] else m['team_b']}\n🔒 截止 {cutoff:%m-%d %H:%M}（{self.display_timezone}）"
                     )
                 except ValueError as exc:
                     e["error"] = str(exc)
@@ -495,7 +693,7 @@ class PredictionFeature(BotPredictionFeature):
             [
                 f"🧾 批量竞猜结果\n👤 {name_text(name)}\n成功 {saved} 场 · 未保存 {len(entries) - saved} 场",
                 *lines,
-                "✏️ 截止前可再次 @我，带上各场队名和新比分一起修改。\n🎯 "
+                "✏️ 截止前可再次 @我，带上各场队名和新胜队一起修改。\n🎯 "
                 + RULE
                 + "\n"
                 + VIEW,
@@ -521,16 +719,12 @@ class PredictionFeature(BotPredictionFeature):
             has_score = parse_score(text) is not None
         except ValueError:
             has_score = True
-        teams = (
-            [
-                m[side]
-                for m in self.prediction_store.matches()
-                for side in ("team_a", "team_b")
-            ]
-            if has_score
-            else ()
-        )
-        requests = split_prediction_requests(text, teams) if has_score else [text]
+        teams = [
+            m[side]
+            for m in self.prediction_store.matches()
+            for side in ("team_a", "team_b")
+        ]
+        requests = split_winner_requests(text, teams)
         intent = prediction_intent(text, has_score, teams)
         if intent == "bot_change" and len(requests) > 1:
             intent = "submit"
@@ -545,59 +739,39 @@ class PredictionFeature(BotPredictionFeature):
         self.prediction_store.member(group, user, name)
         if intent == "bot_change":
             yield event.plain_result(
-                "🤖 我的预测会综合交手记录、近期表现和赛制独立生成，不能由群成员修改。\n✏️ 修改自己的竞猜：@我说“把队名那场改成 2:0”。"
+                "🤖 我的预测会综合交手记录、近期表现和赛制独立生成，不能由群成员修改。\n✏️ 修改自己的竞猜：@我说“把 EDG 那场改成 PRX 赢”。"
             )
             return
         try:
             if intent == "rank":
                 await self._sync_prediction_members(group)
-                message = self._rank_text(group)
+                for path in await self._rank_images(group, text=text):
+                    yield event.image_result(path)
+                return
             elif intent == "bot":
                 account = self.prediction_store.bot_account(group)
                 if account:
-                    rows = self.prediction_store.predictions(group, account["user_id"])
-                    points = next(
-                        (
-                            r["points"]
-                            for r in self.prediction_store.leaderboard(group)
-                            if r["is_bot"]
-                        ),
-                        0,
-                    )
-                    message = my_predictions(
-                        "🤖 " + account["name"],
-                        rows,
-                        points,
-                        self._now_in_display_timezone(),
-                        self._get_display_tz(),
+                    message = self._my_prediction_text(
+                        group, account["user_id"], "🤖 " + account["name"], text
                     )
                     message = (
-                        message.split("✏️ 修改：")[0]
-                        + "🤖 我的预测根据比赛资料独立生成，群成员不能修改。"
+                        re.sub(
+                            r"✏️ 修改：.*?(?=\n\n──────────|$)", "", message, flags=re.S
+                        ).rstrip()
+                        + "\n🤖 我的预测根据比赛资料独立生成，群成员不能修改。"
                     )
                 else:
                     message = "🤖 机器人参与竞猜尚未开启，可在赛事控制台的设置中开启。"
             elif intent == "mine":
-                rows = self.prediction_store.predictions(group, user)
-                points = next(
-                    (
-                        r["points"]
-                        for r in self.prediction_store.leaderboard(group)
-                        if r["user_id"] == user
-                    ),
-                    0,
-                )
-                message = my_predictions(
-                    name,
-                    rows,
-                    points,
-                    self._now_in_display_timezone(),
-                    self._get_display_tz(),
-                )
+                message = self._my_prediction_text(group, user, name, text)
             elif intent == "help":
                 message = HELP
             elif intent == "list":
                 await self._refresh_predictions()
+                if group in self.click_prediction_targets:
+                    ids = await self._send_click_cards(group, force=True)
+                    if ids:
+                        return
                 message = self._prediction_list_text(group)
             elif len(requests) > 1:
                 message = await self._batch_prediction_message(
@@ -608,17 +782,22 @@ class PredictionFeature(BotPredictionFeature):
                 previous = self.prediction_store.last_match(group, user)
                 today = self._today_in_display_timezone().isoformat()
                 rows = self.prediction_store.matches(today)
-                match, a, b = resolve_prediction(text, rows, previous)
+                match, a, b = resolve_winner_prediction(text, rows, previous)
                 changed, updated = await self._save_member_prediction(
                     group, user, match, a, b
                 )
-                message = f"{'✏️ 已修改竞猜' if changed else '✅ 竞猜成功'}\n👤 {name_text(name)}\n\n{match['team_a']} {a} : {b} {match['team_b']}\n🏁 预测胜队：{match['team_a'] if a > b else match['team_b']}\n🔒 截止：{datetime.fromisoformat(updated['lock_at']).astimezone(self._get_display_tz()):%m-%d %H:%M}（{self.display_timezone}）\n\n截止前可 @我说“把 {short_team(match['team_a'])} 那场改成 {a}:{b}”。\n🎯 {RULE}\n{VIEW}"
+                message = f"{'✏️ 已修改竞猜' if changed else '✅ 竞猜成功'}\n👤 {name_text(name)}\n\n{match['team_a']} vs {match['team_b']}\n🏁 预测胜队：{match['team_a'] if a > b else match['team_b']}\n🔒 截止：{datetime.fromisoformat(updated['lock_at']).astimezone(self._get_display_tz()):%m-%d %H:%M}（{self.display_timezone}）\n\n截止前可 @我说“把 {short_team(match['team_a'])} 那场改成 {short_team(match['team_b'] if a > b else match['team_a'])} 赢”。\n🎯 {RULE}\n{VIEW}"
         except ValueError as exc:
             message = str(exc)
         except Exception as exc:
             logger.warning("VAL 竞猜请求失败: %s", exc)
             message = "赛程服务暂时不可用，我没有修改你的竞猜。请稍后重试；仍可 @我说“我的竞猜”或者“积分榜”查看已保存的信息。"
         yield event.plain_result(message)
+        if intent == "list":
+            try:
+                await self._send_click_cards(group, force=True)
+            except Exception as exc:
+                self._record_prediction_error("点选卡片发送失败", group, exc)
 
     async def _sync_prediction_members(self, group):
         platform_id, _, group_id = group.split(":", 2)
@@ -651,12 +830,13 @@ class PredictionFeature(BotPredictionFeature):
         delivery_key=None,
         delivery_day=None,
         rank_day=None,
+        tournament_id=None,
     ):
         if group not in self.prediction_targets:
             raise ValueError("请先将此群加入竞猜目标。")
         if kind == "积分":
             await self._sync_prediction_members(group)
-            message = self._rank_text(group)
+            message = self._rank_text(group, tournament_id=tournament_id, day=rank_day)
             if rank_day:
                 message = (
                     f"🏁 {date.fromisoformat(rank_day):%m月%d日}的比赛已结束，竞猜已结算。\n\n"
@@ -667,9 +847,28 @@ class PredictionFeature(BotPredictionFeature):
             message = self._prediction_list_text(group)
         else:
             raise ValueError("未知播报类型。")
-        ok = await self.context.send_message(group, MessageChain().message(message))
-        if not ok:
-            raise RuntimeError("平台未确认发送成功。")
+        if kind == "竞猜" and group in self.click_prediction_targets:
+            ids = await self._send_click_cards(group, force=not scheduled)
+            message = f"已发送 {len(ids)} 场胜负竞猜，每场两个选项。"
+            if not ids:
+                message = "🎯 今日暂无开放竞猜的比赛。"
+                ok = await self.context.send_message(
+                    group, MessageChain().message(message)
+                )
+                if not ok:
+                    raise RuntimeError("平台未确认发送成功。")
+        else:
+            chain = MessageChain()
+            if kind == "积分":
+                for path in await self._rank_images(
+                    group, tournament_id=tournament_id, day=rank_day
+                ):
+                    chain.file_image(path)
+            else:
+                chain.message(message)
+            ok = await self.context.send_message(group, chain)
+            if not ok:
+                raise RuntimeError("平台未确认发送成功。")
         if scheduled:
             self.prediction_store.mark_delivered(
                 delivery_day or self._today_in_display_timezone().isoformat(),
@@ -685,6 +884,16 @@ class PredictionFeature(BotPredictionFeature):
         group = request.query.get("group", "")
         if group and group not in self.prediction_targets:
             return error_response("请选择已配置的竞猜群。")
+        tournaments = self._prediction_tournaments()
+        requested = request.query.get("tournament", "")
+        event = (
+            self.prediction_store.tournament(requested)
+            if requested
+            else self.prediction_store.tournament(self._view_tournament_ids()[0])
+        )
+        if not event:
+            return error_response("请选择有效的赛事。")
+        tournament_id = event["tournament_id"]
         snapshot = self._build_monitor_snapshot()
         for m in snapshot["match_states"]:
             m.update(self.prediction_store.match_metadata(m["match_id"]))
@@ -703,6 +912,9 @@ class PredictionFeature(BotPredictionFeature):
             "last_error": self._prediction_last_error,
             "bot_enabled": self._safe_bool(self.config.get("prediction_bot_enabled")),
             "rank_after_matches": group in self.rank_after_matches_targets,
+            "tournaments": tournaments,
+            "tournament_id": tournament_id,
+            "tournament_name": event["name"],
             "rank_batches": [
                 {
                     "day": b["day"],
@@ -722,9 +934,16 @@ class PredictionFeature(BotPredictionFeature):
                 for m in self.prediction_store.matches(
                     self._today_in_display_timezone().isoformat()
                 )
+                if m["tournament_id"] == tournament_id
             ],
-            "leaderboard": self.prediction_store.leaderboard(group) if group else [],
-            "entries": self.prediction_store.predictions(group)[:200] if group else [],
+            "leaderboard": self.prediction_store.leaderboard(group, tournament_id)
+            if group
+            else [],
+            "entries": self.prediction_store.predictions(
+                group, tournament_id=tournament_id
+            )[:200]
+            if group
+            else [],
             "events": self.prediction_store.events(),
         }
         return json_response(snapshot)
@@ -766,6 +985,8 @@ class PredictionFeature(BotPredictionFeature):
                 raise ValueError(f"{spec['description']}请填 HH:MM。")
             if typ == "int" and not 0 <= value <= 100000:
                 raise ValueError(f"{spec['description']}超出范围。")
+            if key == "daily_push_lead_minutes" and not 1 <= value <= 1440:
+                raise ValueError("首场赛前提前分钟数请填写 1–1440。")
             if typ in {"string", "text"} and len(value) > 10000:
                 raise ValueError("设置内容过长。")
             if spec.get("options") and typ == "string" and value not in spec["options"]:
@@ -880,7 +1101,9 @@ class PredictionFeature(BotPredictionFeature):
             if payload.get("kind") == "竞猜":
                 await self._refresh_predictions()
             message = await self._broadcast_prediction(
-                payload.get("group"), payload.get("kind")
+                payload.get("group"),
+                payload.get("kind"),
+                tournament_id=payload.get("tournament") or None,
             )
             return json_response({"sent": True, "preview": message})
         except Exception as exc:

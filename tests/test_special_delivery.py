@@ -14,7 +14,7 @@ class SpecialDeliveryTests(unittest.IsolatedAsyncioTestCase):
         p.config = {
             "special_report_enabled": True,
             "special_map_report_enabled": False,
-            "special_push_targets": "default:GroupMessage:42",
+            "special_push_targets": "default:GroupMessage:100000001",
         }
         p.context = SimpleNamespace(send_message=AsyncMock(return_value=True))
         p._now_in_display_timezone = lambda: datetime(2026, 9, 21)

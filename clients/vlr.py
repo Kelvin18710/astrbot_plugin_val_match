@@ -422,6 +422,7 @@ class VlrClient(BaseMatchClient):
         self._page_display_offset: timedelta | None = None
         self.last_page_display_offset: timedelta | None = None
         self.last_detail_time_source: str = ""
+        self._cached_event_selection = self._selected_event_names()
 
     @property
     def api_url(self) -> str:
@@ -467,6 +468,12 @@ class VlrClient(BaseMatchClient):
         }
 
     async def get_matches_by_date(self, target_date: date) -> list[MatchRecord]:
+        selection = self._selected_event_names()
+        if selection != self._cached_event_selection:
+            for key in list(self._cache):
+                if key.startswith("vlr:"):
+                    self._cache.pop(key, None)
+            self._cached_event_selection = selection
         cache_key = f"vlr:{target_date.isoformat()}"
         cached = self._cache_get(cache_key)
         if cached is not None:
@@ -476,6 +483,12 @@ class VlrClient(BaseMatchClient):
 
         self.last_cache_hit = False
         errors: list[str] = []
+        event_matches: list[MatchRecord] = []
+        if selection:
+            try:
+                event_matches = await self._load_selected_event_matches(target_date)
+            except Exception as exc:
+                errors.append(f"event_schedule: {self._describe_error(exc)}")
         skip_api = self._should_skip_vlr_api()
         if skip_api:
             loaders = [self._load_from_vlr_html]
@@ -488,7 +501,11 @@ class VlrClient(BaseMatchClient):
         for loader in loaders:
             try:
                 matches = await loader(target_date)
-                if matches:
+                if matches or event_matches:
+                    merged = {m.match_id: m for m in [*matches, *event_matches]}
+                    matches = sorted(
+                        merged.values(), key=lambda m: (m.start_time, m.match_id)
+                    )
                     if loader == self._load_from_vlr_api:
                         self._api_skip_until = 0.0
                     self.last_success_api = (
@@ -502,6 +519,12 @@ class VlrClient(BaseMatchClient):
                 errors.append(f"{loader.__name__}: {self._describe_error(exc)}")
                 if loader == self._load_from_vlr_api:
                     self._mark_vlr_api_failed()
+        if event_matches:
+            self.current_data_source_type = "VLR_EVENT"
+            self.last_parsed_count = len(event_matches)
+            self.last_failure_reason = ""
+            self._cache_set(cache_key, event_matches)
+            return event_matches
         self.last_failure_reason = " | ".join(errors) if errors else "未找到比赛数据。"
         self.last_parsed_count = 0
         self._cache_set(cache_key, [])
@@ -529,6 +552,14 @@ class VlrClient(BaseMatchClient):
     async def discover_tournaments(self) -> list[str]:
         names: list[str] = []
         seen: set[str] = set()
+        errors: list[str] = []
+        try:
+            events = await self._get_vlr_events(force_refresh=True)
+            for event in events:
+                seen.add(event["name"].casefold())
+                names.append(event["name"])
+        except Exception as exc:
+            errors.append(self._describe_error(exc))
         page_specs = (
             (
                 "schedule",
@@ -543,7 +574,12 @@ class VlrClient(BaseMatchClient):
         )
         for kind, max_pages, completed in page_specs:
             for page in range(1, max_pages + 1):
-                html = await self._get_vlr_page(kind, page)
+                self._cache.pop(f"vlr-page:{kind}:{page}", None)
+                try:
+                    html = await self._get_vlr_page(kind, page)
+                except Exception as exc:
+                    errors.append(self._describe_error(exc))
+                    continue
                 parsed = self._parse_vlr_match_list_html(html, completed=completed)
                 if not parsed:
                     continue
@@ -556,7 +592,103 @@ class VlrClient(BaseMatchClient):
                         continue
                     seen.add(key)
                     names.append(name)
+        if not names and errors:
+            raise MatchSourceError("无法更新赛事列表：" + " | ".join(errors))
         return sorted(names, key=str.casefold)
+
+    def _selected_event_names(self) -> tuple[str, ...]:
+        raw = self.config.get(
+            "special_tournaments", self.config.get("preferred_tournaments", [])
+        )
+        if isinstance(raw, str):
+            raw = re.split(r"[,，;；\n]", raw)
+        return tuple(
+            sorted(
+                {
+                    str(name).strip().casefold()
+                    for name in (raw or [])
+                    if str(name).strip()
+                }
+            )
+        )
+
+    async def _get_vlr_events(
+        self, *, force_refresh: bool = False
+    ) -> list[dict[str, str]]:
+        if not force_refresh:
+            cached = self._cache_get("vlr-events")
+            if isinstance(cached, list):
+                return cached
+        response = await self._request(
+            "GET", f"{self.web_url}/events", headers=self.browser_headers
+        )
+        events = self._parse_vlr_events_html(response.text)
+        if not events:
+            raise MatchSourceError("VLR 赛事目录未返回可识别的赛事。")
+        self._cache_set("vlr-events", events, ttl=max(self.cache_ttl_seconds, 120))
+        return events
+
+    def _parse_vlr_events_html(self, html: str) -> list[dict[str, str]]:
+        if BeautifulSoup is None:
+            raise MatchSourceError("缺少 BeautifulSoup，无法解析赛事目录。")
+        soup = BeautifulSoup(html, "html.parser")
+        events: dict[str, dict[str, str]] = {}
+        for node in soup.select("a.event-item[href]"):
+            name = self._node_text(node.select_one(".event-item-title"))
+            href = str(node.get("href", ""))
+            if name and re.fullmatch(r"/event/\d+/[^/?#]+/?", href):
+                events.setdefault(
+                    name.casefold(), {"name": name, "href": href.rstrip("/")}
+                )
+        return list(events.values())
+
+    async def _load_selected_event_matches(
+        self, target_date: date
+    ) -> list[MatchRecord]:
+        selected = set(self._selected_event_names())
+        events = await self._get_vlr_events()
+        matches: list[MatchRecord] = []
+        for event in events:
+            if event["name"].casefold() not in selected:
+                continue
+            href = (
+                event["href"].replace("/event/", "/event/matches/", 1)
+                + "/?series_id=all"
+            )
+            cache_key = "vlr-event-page:" + href
+            html = self._cache_get(cache_key)
+            if not isinstance(html, str):
+                response = await self._request(
+                    "GET", self.web_url + href, headers=self.browser_headers
+                )
+                html = response.text
+                self._cache_set(cache_key, html, ttl=max(self.cache_ttl_seconds, 120))
+            rows = self._parse_vlr_match_list_html(html, completed=False)
+            for match in rows:
+                stage = match.tournament_name
+                match.tournament_name = event["name"]
+                match.schedule_name = ": ".join(
+                    s for s in (stage, match.schedule_name) if s and s != "未知赛事"
+                )
+                match.level = self._infer_vlr_level(
+                    match.tournament_name, match.schedule_name
+                )
+                match.raw["event_href"] = event["href"]
+            # Event pages use the same date/time markup as the global schedule.
+            # Normalize before filtering so cross-midnight fixtures keep their date.
+            self._page_display_offset = None
+            await self._normalize_matches_to_display_timezone(rows)
+            rows = [m for m in rows if m.match_date == target_date.isoformat()]
+            await self._fill_match_times_from_details(rows)
+            rows = [m for m in rows if m.match_date == target_date.isoformat()]
+            for match in rows:
+                match.raw["event_href"] = event["href"]
+            if rows and self.fetch_bo_from_details:
+                await self._fill_best_of_from_details(
+                    rows[: self.max_detail_fetch_matches]
+                )
+            matches.extend(rows)
+        return sorted(matches, key=lambda m: (m.start_time, m.match_id))
 
     async def debug_probe(self, target_date: date) -> RequestDebugInfo:
         try:

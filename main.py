@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 import httpx
 from astrbot.api import AstrBotConfig, logger
 from astrbot.api.event import AstrMessageEvent, MessageChain, filter
+from astrbot.api.message_components import At
 from astrbot.api.platform import MessageType
 from astrbot.api.star import Context, Star
 from astrbot.core.platform.message_session import MessageSession
@@ -165,8 +166,43 @@ class ValMatchPlugin(PredictionFeature, Star):
 
     @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE, priority=100)
     async def prediction_message(self, event: AstrMessageEvent):
+        async for result in self._handle_click_prediction(event):
+            yield result
+            return
+        if getattr(event, "is_stopped", lambda: False)():
+            return
+        async for result in self._handle_schedule_message(event):
+            yield result
+            return
         async for result in self._handle_prediction_message(event):
             yield result
+
+    async def _handle_schedule_message(self, event: AstrMessageEvent):
+        if not any(
+            isinstance(c, At) and str(c.qq) == str(event.message_obj.self_id)
+            for c in event.message_obj.message
+        ):
+            return
+        text = re.sub(r"\[CQ:at,[^\]]+\]|\[At:[^\]]+\]", "", event.message_str).strip()
+        match = re.fullmatch(
+            r"(?:请|麻烦|帮我|给我|帮忙|请帮我)?\s*"
+            r"(?:查一下|查查|查询|查看|看看|看一下|查|看)?\s*"
+            r"(?:(昨天|昨日|今天|今日|明天|明日)的?)?\s*"
+            r"(?:无畏契约|VALORANT|瓦)?\s*(?:比赛)?赛程(?:表|安排)?[呢吗吧?？。！!\s]*",
+            text,
+            re.I,
+        )
+        if not match:
+            return
+        event.stop_event()
+        offset = {"昨天": -1, "昨日": -1, "明天": 1, "明日": 1}.get(match[1], 0)
+        target_date = self._today_in_display_timezone() + timedelta(days=offset)
+        try:
+            message = await self._render_for_date(target_date, None)
+        except Exception as exc:
+            logger.warning("VAL 群内赛程查询失败: %s", exc)
+            message = "暂时无法获取赛程，请稍后再试。"
+        yield event.plain_result(message)
 
     @filter.command_group("val")
     def val(self) -> None:
@@ -780,6 +816,14 @@ class ValMatchPlugin(PredictionFeature, Star):
 
     def _daily_schedule_due(self) -> bool:
         now = self._now_in_display_timezone()
+        if self.config.get("daily_push_mode") == "首场赛前":
+            at = getattr(self, "_daily_first_trigger", None)
+            return bool(
+                at
+                and at.date() == now.date()
+                and now >= at
+                and self._daily_schedule_pending()
+            )
         at = datetime.combine(
             now.date(),
             self._parse_push_time(self.config.get("push_time")),
@@ -787,9 +831,49 @@ class ValMatchPlugin(PredictionFeature, Star):
         )
         return now >= at and bool(self._daily_schedule_pending())
 
+    async def _refresh_daily_first_trigger(self):
+        now = self._now_in_display_timezone()
+        self._daily_first_trigger = None
+        self._daily_first_next = None
+        self._daily_first_matches = []
+        for day in [now.date(), now.date() + timedelta(days=1)]:
+            matches, _ = await self._query_matches(day)
+            filtered, _ = self._apply_preferred_filters(
+                matches, self.default_levels, False
+            )
+            starts = [
+                self._match_start_datetime(m)
+                for m in filtered
+                if m.match_date == day.isoformat()
+            ]
+            starts = [start for start in starts if start is not None]
+            if not starts:
+                continue
+            lead = max(
+                1, min(int(self.config.get("daily_push_lead_minutes", 120)), 1440)
+            )
+            trigger = max(
+                min(starts) - timedelta(minutes=lead),
+                datetime.combine(day, time.min, tzinfo=now.tzinfo),
+            )
+            if day == now.date():
+                self._daily_first_trigger = trigger
+                self._daily_first_matches = [m.match_id for m in filtered]
+                if self._daily_schedule_pending():
+                    self._daily_first_next = max(trigger, now)
+                    break
+            elif self._daily_first_next is None:
+                self._daily_first_next = trigger
+
     async def _push_loop(self) -> None:
         while True:
             try:
+                if self.config.get("daily_push_mode") == "首场赛前":
+                    await self._refresh_daily_first_trigger()
+                    if self._daily_schedule_due():
+                        await self._push_today_matches()
+                    await asyncio.sleep(60)
+                    continue
                 if not self._daily_schedule_due():
                     await asyncio.sleep(self._seconds_until_next_push())
                 await self._push_today_matches()
@@ -1232,6 +1316,17 @@ class ValMatchPlugin(PredictionFeature, Star):
     async def _check_special_match_result(
         self, match: MatchRecord, state: dict[str, Any]
     ) -> None:
+        if not hasattr(self, "_special_result_locks"):
+            self._special_result_locks = {}
+        lock = self._special_result_locks.setdefault(
+            self._match_state_key(match), asyncio.Lock()
+        )
+        async with lock:
+            await self._check_special_match_result_locked(match, state)
+
+    async def _check_special_match_result_locked(
+        self, match: MatchRecord, state: dict[str, Any]
+    ) -> None:
         target_date = self._parse_match_date(match)
         if target_date is None:
             target_date = self._today_in_display_timezone()
@@ -1268,7 +1363,29 @@ class ValMatchPlugin(PredictionFeature, Star):
         *,
         report: MatchReport | None = None,
     ) -> None:
-        if state.get("report_complete") or not self.special_report_enabled:
+        if not hasattr(self, "_special_report_locks"):
+            self._special_report_locks = {}
+        lock = self._special_report_locks.setdefault(
+            self._match_state_key(match), asyncio.Lock()
+        )
+        async with lock:
+            await self._send_special_report_locked(match, state, report=report)
+
+    async def _send_special_report_locked(self, match, state, *, report=None):
+        store = getattr(self, "prediction_store", None)
+        sent = set(state.get("report_targets_sent", []))
+        if store:
+            sent.update(
+                g
+                for g in self.special_push_targets
+                if store.report_delivered(g, match.match_id)
+            )
+        if self.special_push_targets and all(
+            g in sent for g in self.special_push_targets
+        ):
+            state.update(report_sent=True, report_complete=True)
+            return
+        if not self.special_report_enabled:
             return
         report = report or await self._fetch_match_report(match, force_refresh=True)
         if report is None:
@@ -1313,16 +1430,26 @@ class ValMatchPlugin(PredictionFeature, Star):
         title = f"赛后战报：{match.team_a} {match.score} {match.team_b}"
         success_count = 0
         for target in self.special_push_targets:
+            if target in sent:
+                continue
             try:
-                await self.context.send_message(
+                ok = await self.context.send_message(
                     target, MessageChain().message(title).file_image(image_path)
                 )
+                if not ok:
+                    raise RuntimeError("平台未确认发送成功。")
+                if store:
+                    store.mark_report_delivered(target, match.match_id)
+                sent.add(target)
                 success_count += 1
             except Exception as exc:  # noqa: BLE001
                 logger.warning(
                     "astrbot_plugin_val_match: 特别关心战报推送失败 %s: %s", target, exc
                 )
-        if success_count:
+        state["report_targets_sent"] = sorted(sent)
+        if self.special_push_targets and all(
+            g in sent for g in self.special_push_targets
+        ):
             state["report_sent"] = True
             state["report_complete"] = True
             self._record_special_timeline(
@@ -3344,7 +3471,12 @@ class ValMatchPlugin(PredictionFeature, Star):
                     )
                     if self._push_task
                     else "-",
-                    "detail": f"目标 {len(self.push_targets)} 个",
+                    "detail": (
+                        f"首场赛前 {self.config.get('daily_push_lead_minutes', 120)} 分钟 · "
+                        if self.config.get("daily_push_mode") == "首场赛前"
+                        else "固定时间 · "
+                    )
+                    + f"目标 {len(self.push_targets)} 个",
                 },
                 {
                     "name": "特别关心后台任务",
@@ -3458,7 +3590,9 @@ class ValMatchPlugin(PredictionFeature, Star):
             return "开赛状态轮询"
         return "等待进入窗口"
 
-    def _next_daily_push_datetime(self, now: datetime) -> datetime:
+    def _next_daily_push_datetime(self, now: datetime) -> datetime | None:
+        if self.config.get("daily_push_mode") == "首场赛前":
+            return getattr(self, "_daily_first_next", None)
         configured = self._parse_push_time(self.config.get("push_time"))
         next_run = datetime.combine(
             now.date(), configured, tzinfo=self._get_display_tz()

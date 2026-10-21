@@ -1,0 +1,39 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build verified installation archive
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os, re, subprocess, zipfile
+          from pathlib import Path
+          version = os.environ['GITHUB_REF_NAME'].removeprefix('v')
+          metadata = Path('metadata.yaml').read_text()
+          assert re.search(r'^version:\s*' + re.escape(version) + r'\s*$', metadata, re.M)
+          archive = f'astrbot_plugin_val_match-{version}.zip'
+          subprocess.run(['git', 'archive', '--format=zip', '--prefix=astrbot_plugin_val_match/', '-o', archive, 'HEAD'], check=True)
+          assert Path(archive).stat().st_size < 16 * 1024 * 1024
+          with zipfile.ZipFile(archive) as z:
+              assert z.testzip() is None
+              assert not any(p.endswith(('.sqlite3', '.pyc')) or any(part in {'data', 'artifacts', '__pycache__', '.env'} for part in Path(p).parts) for p in z.namelist())
+          changes = Path('CHANGELOG.md').read_text().split('\n## ')[1]
+          Path('release-notes.md').write_text(changes.split('\n', 1)[1].strip() + '\n')
+          PY
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          gh release create "$GITHUB_REF_NAME" "astrbot_plugin_val_match-${version}.zip" --verify-tag --title "VAL Match ${version}" --notes-file release-notes.md

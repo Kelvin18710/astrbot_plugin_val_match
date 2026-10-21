@@ -74,8 +74,9 @@ class AfterMatchRankTests(unittest.IsolatedAsyncioTestCase):
             )
         await p._deliver_after_match_ranks()
         p.context.send_message.assert_awaited_once()
-        message = p.context.send_message.call_args.args[1].chain[0].text
-        self.assertIn("10月01日的比赛已结束，竞猜已结算", message)
+        message = p.context.send_message.call_args.args[1].chain[0]
+        self.assertEqual(message.type, "Image")
+        message = p._rank_text(A, day="2026-10-01")
         self.assertIn("100.0%（猜中 2/2 场）", message)
         self.assertTrue(p.prediction_store.delivered("2026-10-01", "赛后积分", A))
 
@@ -136,8 +137,11 @@ class AfterMatchRankTests(unittest.IsolatedAsyncioTestCase):
         await p._deliver_after_match_ranks()
         self.assertTrue(p.prediction_store.delivered("2026-10-01", "赛后积分", A))
         self.assertFalse(p.prediction_store.delivered("2026-10-02", "赛后积分", A))
-        self.assertIn(
-            "10月01日", p.context.send_message.call_args.args[1].chain[0].text
+        self.assertEqual(
+            p.context.send_message.call_args.args[1].chain[0].type, "Image"
+        )
+        self.assertEqual(
+            p.prediction_store.rank_day_tournaments("2026-10-01", A), ["legacy"]
         )
 
     async def test_selected_group_skips_clock_schedule_others_keep_it(self):

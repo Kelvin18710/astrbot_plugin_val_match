@@ -33,17 +33,17 @@ class BatchFeatureTests(unittest.IsolatedAsyncioTestCase):
                 )
                 self.assertIn("成功 2 场 · 未保存 0 场", reply[0])
                 self.assertIn("👤 群友", reply[0])
-                self.assertEqual(self.picks(), {"123456": (2, 1), "123457": (2, 0)})
+                self.assertEqual(self.picks(), {"123456": (1, 0), "123457": (1, 0)})
         reply = await self.call(self.event("把EDG那场改成2:0，然后把FNC那场改成1:2"))
         self.assertEqual(reply[0].count("✏️ 已修改"), 2)
-        self.assertEqual(self.picks(), {"123456": (2, 0), "123457": (1, 2)})
+        self.assertEqual(self.picks(), {"123456": (1, 0), "123457": (0, 1)})
 
     async def test_reverse_team_order_and_mixed_submit_modify(self):
         await self.call(self.event("竞猜EDG2:1"))
         reply = await self.call(self.event("把PRX那场改成2:0，DRX2:1赢FNC"))
         self.assertIn("✏️ 已修改", reply[0])
         self.assertIn("✅ 已提交", reply[0])
-        self.assertEqual(self.picks(), {"123456": (0, 2), "123457": (1, 2)})
+        self.assertEqual(self.picks(), {"123456": (0, 1), "123457": (0, 1)})
 
     async def test_invalid_score_or_contradiction_does_not_block_other_match(self):
         await self.call(self.event("竞猜EDG2:1"))
@@ -58,8 +58,8 @@ class BatchFeatureTests(unittest.IsolatedAsyncioTestCase):
             with self.subTest(clause=clause):
                 reply = await self.call(self.event(clause + "，FNC2:0赢DRX"))
                 self.assertIn("成功 1 场 · 未保存 1 场", reply[0])
-                self.assertEqual(self.picks()["123456"], (2, 1))
-                self.assertEqual(self.picks()["123457"], (2, 0))
+                self.assertEqual(self.picks()["123456"], (1, 0))
+                self.assertEqual(self.picks()["123457"], (1, 0))
 
     async def test_locked_match_and_detail_failure_leave_old_pick_unchanged(self):
         await self.call(self.event("竞猜EDG2:1"))
@@ -74,7 +74,7 @@ class BatchFeatureTests(unittest.IsolatedAsyncioTestCase):
         reply = await self.call(self.event("把EDG改成2:0，FNC2:0赢DRX"))
         self.assertIn("成功 1 场 · 未保存 1 场", reply[0])
         self.assertIn("已封盘", reply[0])
-        self.assertEqual(self.picks()["123456"], (2, 1))
+        self.assertEqual(self.picks()["123456"], (1, 0))
 
         async def verify(match):
             if match["match_id"] == "123456":
@@ -84,7 +84,7 @@ class BatchFeatureTests(unittest.IsolatedAsyncioTestCase):
         reply = await self.call(self.event("把EDG改成2:0，FNC1:2输给DRX"))
         self.assertIn("成功 1 场 · 未保存 1 场", reply[0])
         self.assertIn("暂时无法核实", reply[0])
-        self.assertEqual(self.picks(), {"123456": (2, 1), "123457": (1, 2)})
+        self.assertEqual(self.picks(), {"123456": (1, 0), "123457": (0, 1)})
 
     async def test_duplicates_including_illegal_score_are_all_rejected(self):
         await self.call(self.event("竞猜EDG2:1"))
@@ -96,7 +96,7 @@ class BatchFeatureTests(unittest.IsolatedAsyncioTestCase):
                 reply = await self.call(self.event(text))
                 self.assertIn("成功 1 场 · 未保存 2 场", reply[0])
                 self.assertIn("多次提到这场比赛", reply[0])
-                self.assertEqual(self.picks()["123456"], (2, 1))
+                self.assertEqual(self.picks()["123456"], (1, 0))
 
     async def test_uncertainty_and_future_scope_never_write_any_pick(self):
         for text in [
@@ -121,7 +121,7 @@ class BatchFeatureTests(unittest.IsolatedAsyncioTestCase):
         await self.call(self.event("竞猜EDG2:1"))
         reply = await self.call(self.event("改成2:0，FNC2:0"))
         self.assertIn("成功 1 场 · 未保存 1 场", reply[0])
-        self.assertEqual(self.picks(), {"123456": (2, 1), "123457": (2, 0)})
+        self.assertEqual(self.picks(), {"123456": (1, 0), "123457": (1, 0)})
         reply = await self.call(self.event("我猜UNKNOWN2:0，FNC1:2"))
         self.assertIn("成功 1 场 · 未保存 1 场", reply[0])
 
@@ -138,7 +138,7 @@ class BatchFeatureTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.picks(), {})
         reply = await self.call(self.event("把你的EDG竞猜改成2:0，我猜FNC2:0赢DRX"))
         self.assertIn("成功 1 场 · 未保存 1 场", reply[0])
-        self.assertEqual(self.picks(), {"123457": (2, 0)})
+        self.assertEqual(self.picks(), {"123457": (1, 0)})
         self.assertEqual(self.picks("bot"), {"123456": (2, 1), "123457": (2, 1)})
         reply = await self.call(self.event("我猜EDG2:0，把你的FNC竞猜改成2:0"))
         self.assertIn("成功 1 场 · 未保存 1 场", reply[0])
@@ -152,7 +152,7 @@ class BatchFeatureTests(unittest.IsolatedAsyncioTestCase):
         )
         reply = await self.call(self.event("我猜EDG2:1，FNC2:0"))
         self.assertIn("成功 1 场 · 未保存 1 场", reply[0])
-        self.assertEqual(self.picks(), {"123456": (2, 1)})
+        self.assertEqual(self.picks(), {"123456": (1, 0)})
 
         async def reschedule(match):
             self.p.prediction_store.sync_match(
@@ -167,7 +167,7 @@ class BatchFeatureTests(unittest.IsolatedAsyncioTestCase):
         self.p._verify_prediction_match.side_effect = reschedule
         reply = await self.call(self.event("把EDG改成2:0"))
         self.assertIn("日期已变更", reply[0])
-        self.assertEqual(self.picks()["123456"], (2, 1))
+        self.assertEqual(self.picks()["123456"], (1, 0))
 
     async def test_each_write_rechecks_time_when_a_batch_crosses_cutoff(self):
         self.p.prediction_store.sync_match(
@@ -182,7 +182,7 @@ class BatchFeatureTests(unittest.IsolatedAsyncioTestCase):
         self.p._verify_prediction_match.side_effect = verify
         reply = await self.call(self.event("我猜EDG2:1，FNC2:0"))
         self.assertIn("成功 1 场 · 未保存 1 场", reply[0])
-        self.assertEqual(self.picks(), {"123456": (2, 1)})
+        self.assertEqual(self.picks(), {"123456": (1, 0)})
 
     async def test_batch_requires_at_and_configured_group_and_preserves_other_group(
         self,

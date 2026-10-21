@@ -120,7 +120,7 @@ def validate_batch_request(text: str) -> None:
     text = re.sub(r"\[CQ:at,[^\]]+\]|\[At:[^\]]+\]", "", text).strip()
     if re.search(r"明天|后天|明日|后日|未来|下周|下星期|下个月", text):
         raise ValueError(
-            "目前只支持今天的比赛，不能提前竞猜或修改未来赛程。请只发送今天各场的队名和比分。"
+            "目前只支持今天的比赛，不能提前竞猜或修改未来赛程。请只发送今天各场的队名和胜队。"
         )
     # These words can scope over all following clauses; do not turn a discussion
     # or an alternative into several independent confirmed writes.
@@ -206,7 +206,7 @@ def resolve_prediction_match(
         candidates = both_teams
     if len(candidates) != 1:
         raise ValueError(
-            "这场比赛还不够明确。请先 @我说“今日竞猜”查看对阵，再带上队名和比分告诉我，例如“我猜 EDG 2比1 赢 PRX”。"
+            "这场比赛还不够明确。请先 @我说“今日竞猜”查看对阵，再带上队名和胜队告诉我，例如“我猜 EDG 赢 PRX”。"
         )
     return candidates[0]
 
@@ -244,6 +244,75 @@ def resolve_prediction(
     return match, a, b
 
 
+def resolve_winner_prediction(text, matches, previous_id=None):
+    """Accept an unambiguous team winner; old score phrases only select a side."""
+    validate_batch_request(text)
+    if parse_score(text) is not None:
+        match, a, b = resolve_prediction(text, matches, previous_id)
+        return match, int(a > b), int(b > a)
+    if re.search(
+        r"[零一二两三四五六七八九十百\d]+\s*(?:比|:|：|∶|－|-)\s*[-−零一二两三四五六七八九十百\d]+",
+        text,
+    ):
+        raise ValueError("比分写法无法识别；现在只需选择胜队，例如“我猜 EDG 赢”。")
+    if re.search(
+        r"不要|别|不想|没(?:有)?(?:猜|押)|不是|不改|不变|保持|取消|撤销|又输|又赢", text
+    ):
+        raise ValueError("这句话还不够确定，我没有修改竞猜。请明确说“我猜 EDG 赢”。")
+    match, pa, pb = resolve_prediction_match(text, matches, previous_id)
+    winners = set()
+    for side, team in [("a", match["team_a"]), ("b", match["team_b"])]:
+        outcomes = explicit_outcome(text, team)
+        if "win" in outcomes:
+            winners.add(side)
+        if "lose" in outcomes:
+            winners.add("b" if side == "a" else "a")
+    # “我猜 EDG” and “改选 PRX” are clear when exactly one team is named.
+    if (
+        not winners
+        and (pa is None) != (pb is None)
+        and re.search(r"我猜|我押|竞猜|预测|看好|选|改成|改为", text)
+    ):
+        winners.add("a" if pa is not None else "b")
+    if len(winners) != 1:
+        raise ValueError(
+            "请选择一个明确的胜队，例如“我猜 EDG 赢”，或直接点比赛消息下方的表情。"
+        )
+    winner = winners.pop()
+    # Opposing explicit claims must not silently choose either side.
+    for side, team in [("a", match["team_a"]), ("b", match["team_b"])]:
+        stated = explicit_outcome(text, team)
+        if (side == winner and "lose" in stated) or (
+            side != winner and "win" in stated
+        ):
+            raise ValueError("胜队描述有冲突，请只选一支队伍。")
+    return match, int(winner == "a"), int(winner == "b")
+
+
+def split_winner_requests(text, teams=()):
+    if parse_score_count(text) > 1:
+        return split_prediction_requests(text, teams)
+    parts = [
+        p.strip()
+        for p in re.split(r"[,，;；。\n、]+|然后|另外|以及|同时|还有", text)
+        if p.strip()
+    ]
+    # Keep a fragment such as “把 EDG 那场，改成 PRX 赢” together.
+    if len(parts) > 1 and all(
+        any(team_position(p, t) is not None for t in teams)
+        and re.search(r"赢|胜|输|负|我猜|我押|改选|改成|改为|竞猜", p)
+        for p in parts
+    ):
+        return parts
+    return [text]
+
+
+def parse_score_count(text):
+    return len(
+        re.findall(r"[零一二两三四五0-9]+\s*(?:比|:|：|-)\s*[零一二两三四五0-9]+", text)
+    )
+
+
 class PredictionStore:
     def __init__(self, path: Path):
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -261,7 +330,116 @@ class PredictionStore:
         CREATE TABLE IF NOT EXISTS bot_analyses(match_id TEXT PRIMARY KEY,state TEXT,payload TEXT,attempted_at TEXT,attempts INTEGER);
         CREATE TABLE IF NOT EXISTS deliveries(day TEXT,kind TEXT,group_id TEXT,PRIMARY KEY(day,kind,group_id));
         CREATE TABLE IF NOT EXISTS rank_days(day TEXT,group_id TEXT,match_ids TEXT,PRIMARY KEY(day,group_id));
+        CREATE TABLE IF NOT EXISTS tournaments(tournament_id TEXT PRIMARY KEY,name TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS tournament_aliases(alias TEXT PRIMARY KEY,tournament_id TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS match_tournaments(match_id TEXT PRIMARY KEY,tournament_id TEXT NOT NULL);
+        CREATE INDEX IF NOT EXISTS match_tournaments_event ON match_tournaments(tournament_id);
+        CREATE TABLE IF NOT EXISTS click_cards(group_id TEXT,message_id TEXT,match_id TEXT,demo INTEGER,payload TEXT,created_at TEXT,PRIMARY KEY(group_id,message_id));
+        CREATE TABLE IF NOT EXISTS click_selections(group_id TEXT,message_id TEXT,user_id TEXT,name TEXT,emoji_id TEXT,a INTEGER,b INTEGER,event_at REAL,updated_at TEXT,PRIMARY KEY(group_id,message_id,user_id));
+        CREATE TABLE IF NOT EXISTS click_notices(notice_key TEXT PRIMARY KEY,group_id TEXT,at TEXT);
+        CREATE TABLE IF NOT EXISTS prediction_modes(group_id TEXT,user_id TEXT,match_id TEXT,mode TEXT NOT NULL CHECK(mode IN ('score','winner')),PRIMARY KEY(group_id,user_id,match_id));
+        CREATE TABLE IF NOT EXISTS match_report_deliveries(group_id TEXT,match_id TEXT,at TEXT,PRIMARY KEY(group_id,match_id));
         """)
+        with self.db:
+            self.db.execute(
+                "INSERT OR IGNORE INTO tournaments VALUES('legacy','未归档历史赛事')"
+            )
+        # Existing points are immutable here; only add their event association.
+        for row in self.db.execute(
+            "SELECT m.match_id,md.payload FROM matches m LEFT JOIN match_metadata md USING(match_id)"
+        ).fetchall():
+            payload = json.loads(row["payload"]) if row["payload"] else {}
+            self.bind_tournament(
+                row["match_id"],
+                payload.get("tournament"),
+                payload.get("event_href", ""),
+            )
+
+    def ensure_tournament(self, name, event_href=""):
+        name = " ".join(str(name or "").split())
+        if not name or name == "未知赛事":
+            return self.tournament("legacy")
+        alias = name.casefold()
+        event = re.search(r"/event/(?:matches/)?(\d+)(?:/|$)", str(event_href or ""))
+        old = self.db.execute(
+            "SELECT tournament_id FROM tournament_aliases WHERE alias=?", (alias,)
+        ).fetchone()
+        tournament_id = (
+            "vlr:" + event[1] if event else old[0] if old else "name:" + alias
+        )
+        with self.db:
+            self.db.execute(
+                "INSERT OR IGNORE INTO tournaments VALUES(?,?)", (tournament_id, name)
+            )
+            if old and old[0] != tournament_id:
+                self.db.execute(
+                    "UPDATE match_tournaments SET tournament_id=? WHERE tournament_id=?",
+                    (tournament_id, old[0]),
+                )
+                self.db.execute(
+                    "UPDATE tournament_aliases SET tournament_id=? WHERE tournament_id=?",
+                    (tournament_id, old[0]),
+                )
+                self.db.execute(
+                    "DELETE FROM tournaments WHERE tournament_id=?", (old[0],)
+                )
+            self.db.execute(
+                "INSERT INTO tournament_aliases VALUES(?,?) ON CONFLICT(alias) DO UPDATE SET tournament_id=excluded.tournament_id",
+                (alias, tournament_id),
+            )
+            if event:
+                self.db.execute(
+                    "UPDATE tournaments SET name=? WHERE tournament_id=?",
+                    (name, tournament_id),
+                )
+        return self.tournament(tournament_id)
+
+    def tournament(self, tournament_id):
+        row = self.db.execute(
+            "SELECT * FROM tournaments WHERE tournament_id=?", (tournament_id,)
+        ).fetchone()
+        if not row and str(tournament_id).startswith("name:"):
+            row = self.db.execute(
+                "SELECT t.* FROM tournaments t JOIN tournament_aliases a USING(tournament_id) WHERE a.alias=?",
+                (tournament_id[5:],),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def bind_tournament(self, match_id, name, event_href=""):
+        event = self.ensure_tournament(name, event_href)
+        with self.db:
+            # Missing enrichment must never remove an already known association.
+            if event["tournament_id"] == "legacy":
+                self.db.execute(
+                    "INSERT OR IGNORE INTO match_tournaments VALUES(?,?)",
+                    (match_id, "legacy"),
+                )
+            else:
+                self.db.execute(
+                    "INSERT INTO match_tournaments VALUES(?,?) ON CONFLICT(match_id) DO UPDATE SET tournament_id=excluded.tournament_id",
+                    (match_id, event["tournament_id"]),
+                )
+        return event
+
+    def tournaments(self):
+        return [
+            dict(r)
+            for r in self.db.execute("""SELECT t.*,COUNT(m.match_id) AS match_count,
+            MAX(m.start_at) AS last_start FROM tournaments t
+            LEFT JOIN match_tournaments mt USING(tournament_id) LEFT JOIN matches m USING(match_id)
+            GROUP BY t.tournament_id ORDER BY last_start DESC,t.name""")
+        ]
+
+    def rank_day_tournaments(self, day, group):
+        row = self.db.execute(
+            "SELECT match_ids FROM rank_days WHERE day=? AND group_id=?", (day, group)
+        ).fetchone()
+        ids = set(json.loads(row[0])) if row else set()
+        return list(
+            dict.fromkeys(
+                m["tournament_id"] for m in self.matches() if m["match_id"] in ids
+            )
+        )
 
     def group_names(self):
         return {r[0]: r[1] for r in self.db.execute("SELECT group_id,name FROM groups")}
@@ -334,10 +512,14 @@ class PredictionStore:
                     start.date().isoformat(),
                 ),
             )
+            self.db.execute(
+                "INSERT OR IGNORE INTO match_tournaments VALUES(?,'legacy')",
+                (match_id,),
+            )
 
     def matches(self, day: str | None = None):
         rows = self.db.execute(
-            "SELECT * FROM matches"
+            "SELECT m.*,mt.tournament_id,t.name AS tournament FROM matches m LEFT JOIN match_tournaments mt USING(match_id) LEFT JOIN tournaments t USING(tournament_id)"
             + (" WHERE day=?" if day else "")
             + " ORDER BY start_at,match_id",
             (day,) if day else (),
@@ -352,6 +534,9 @@ class PredictionStore:
                 "INSERT INTO match_metadata VALUES(?,?) ON CONFLICT(match_id) DO UPDATE SET payload=excluded.payload",
                 (match_id, json.dumps(previous, ensure_ascii=False)),
             )
+        self.bind_tournament(
+            match_id, previous.get("tournament"), previous.get("event_href", "")
+        )
 
     def match_metadata(self, match_id):
         row = self.db.execute(
@@ -392,7 +577,7 @@ class PredictionStore:
                 ),
             )
 
-    def submit_bot(self, group, match_id, a, b, now):
+    def submit_bot(self, group, match_id, a, b, now, *, mode="score"):
         account = self.bot_account(group)
         if not account:
             raise ValueError("机器人身份尚未确认。")
@@ -428,19 +613,36 @@ class PredictionStore:
                 (group, account["user_id"], match_id),
             ).fetchone():
                 return False
+            if mode not in {"score", "winner"}:
+                raise ValueError("竞猜模式无效。")
+            if mode == "winner":
+                a, b = int(a > b), int(b > a)
             self.db.execute(
                 "INSERT INTO predictions VALUES(?,?,?,?,?,?,NULL)",
                 (group, account["user_id"], match_id, a, b, now.isoformat()),
             )
-            self.event(
-                "机器人预测",
-                group,
-                f"{account['name']} · {m['team_a']} {a}:{b} {m['team_b']}",
+            self.db.execute(
+                "INSERT OR REPLACE INTO prediction_modes VALUES(?,?,?,?)",
+                (group, account["user_id"], match_id, mode),
             )
+            pick = (
+                f"{m['team_a'] if a > b else m['team_b']} 胜"
+                if mode == "winner"
+                else f"{m['team_a']} {a}:{b} {m['team_b']}"
+            )
+            self.event("机器人预测", group, f"{account['name']} · {pick}")
         return True
 
     def submit(
-        self, group: str, user: str, match_id: str, a: int, b: int, now: datetime
+        self,
+        group: str,
+        user: str,
+        match_id: str,
+        a: int,
+        b: int,
+        now: datetime,
+        *,
+        mode="score",
     ):
         account = self.bot_account(group)
         if account and user == account["user_id"]:
@@ -458,7 +660,17 @@ class PredictionStore:
                 raise ValueError(
                     "这场比赛已封盘：开赛前 10 分钟起不能竞猜或修改。请选其他未封盘比赛。"
                 )
-            validate_score(m["bo"], a, b)
+            if mode == "winner":
+                if (
+                    type(a) is not int
+                    or type(b) is not int
+                    or (a, b) not in {(1, 0), (0, 1)}
+                ):
+                    raise ValueError("请选择一支获胜队伍，不能平局或同时选择两队。")
+            elif mode == "score":
+                validate_score(m["bo"], a, b)
+            else:
+                raise ValueError("竞猜模式无效。")
             old = self.db.execute(
                 "SELECT * FROM predictions WHERE group_id=? AND user_id=? AND match_id=?",
                 (group, user, match_id),
@@ -467,10 +679,19 @@ class PredictionStore:
                 "INSERT INTO predictions VALUES(?,?,?,?,?,?,NULL) ON CONFLICT(group_id,user_id,match_id) DO UPDATE SET a=excluded.a,b=excluded.b,updated_at=excluded.updated_at",
                 (group, user, match_id, a, b, now.isoformat()),
             )
+            self.db.execute(
+                "INSERT OR REPLACE INTO prediction_modes VALUES(?,?,?,?)",
+                (group, user, match_id, mode),
+            )
+            pick = (
+                (m["team_a"] if a > b else m["team_b"]) + " 胜"
+                if mode == "winner"
+                else f"{a}:{b}"
+            )
             self.event(
                 "修改竞猜" if old else "提交竞猜",
                 group,
-                f"{user} · #{match_id} · {a}:{b}",
+                f"{user} · #{match_id} · {pick}",
             )
         return bool(old)
 
@@ -491,13 +712,13 @@ class PredictionStore:
                 (a, b, match_id),
             )
             self.db.execute(
-                "UPDATE predictions SET points=CASE WHEN (a>b)=? THEN 2+CASE WHEN a=? AND b=? THEN 3 ELSE 0 END ELSE 0 END WHERE match_id=? AND points IS NULL",
+                "UPDATE predictions SET points=CASE WHEN (a>b)=? THEN 2+CASE WHEN a=? AND b=? AND NOT EXISTS (SELECT 1 FROM prediction_modes pm WHERE pm.group_id=predictions.group_id AND pm.user_id=predictions.user_id AND pm.match_id=predictions.match_id AND pm.mode='winner') THEN 3 ELSE 0 END ELSE 0 END WHERE match_id=? AND points IS NULL",
                 (a > b, a, b, match_id),
             )
             self.event("自动结算", "", f"#{match_id} · {a}:{b}")
         return True
 
-    def leaderboard(self, group: str):
+    def leaderboard(self, group: str, tournament_id: str | None = None):
         rows = [
             dict(r)
             for r in self.db.execute(
@@ -515,11 +736,13 @@ class PredictionStore:
             FROM members m
             LEFT JOIN bot_accounts ba ON ba.group_id=m.group_id AND ba.user_id=m.user_id
             LEFT JOIN predictions p ON p.group_id=m.group_id AND p.user_id=m.user_id
+                AND (? IS NULL OR EXISTS (SELECT 1 FROM match_tournaments mt
+                    WHERE mt.match_id=p.match_id AND mt.tournament_id=?))
             LEFT JOIN matches game ON game.match_id=p.match_id
             WHERE m.group_id=?
             GROUP BY m.user_id,m.name ORDER BY points DESC,m.user_id
             """,
-                (group,),
+                (tournament_id, tournament_id, group),
             )
         ]
         for row in rows:
@@ -528,18 +751,89 @@ class PredictionStore:
                 if row["settled_predictions"]
                 else None
             )
+            row.update(longest_streak=0, current_streak=0, recent_results=[])
+        by_user = {r["user_id"]: r for r in rows}
+        # Match time, not submission or settlement order, defines a streak.
+        # Unplayed/unsettled and non-participated matches are absent, not losses.
+        results = self.db.execute(
+            """SELECT p.user_id,(p.a>p.b)=(m.result_a>m.result_b) AS won
+            FROM predictions p JOIN matches m USING(match_id)
+            LEFT JOIN match_tournaments mt USING(match_id)
+            WHERE p.group_id=? AND p.points IS NOT NULL AND m.result_a IS NOT NULL
+                AND m.result_b IS NOT NULL AND (? IS NULL OR mt.tournament_id=?)
+            ORDER BY m.start_at,m.match_id""",
+            (group, tournament_id, tournament_id),
+        )
+        for result in results:
+            row = by_user.get(result["user_id"])
+            if row is None:
+                continue
+            won = bool(result["won"])
+            row["current_streak"] = row["current_streak"] + 1 if won else 0
+            row["longest_streak"] = max(row["longest_streak"], row["current_streak"])
+            row["recent_results"] = (row["recent_results"] + [won])[-5:]
         return rows
 
-    def predictions(self, group: str, user: str | None = None):
+    def predictions(
+        self, group: str, user: str | None = None, tournament_id: str | None = None
+    ):
+        params = [group]
+        where = " WHERE p.group_id=?"
+        if user is not None:
+            where += " AND p.user_id=?"
+            params.append(user)
+        if tournament_id is not None:
+            where += " AND mt.tournament_id=?"
+            params.append(tournament_id)
         return [
             dict(r)
             for r in self.db.execute(
-                "SELECT p.*,m.team_a,m.team_b,m.start_at,m.lock_at,m.status,m.result_a,m.result_b,n.name,CASE WHEN ba.user_id IS NULL THEN 0 ELSE 1 END AS is_bot FROM predictions p JOIN matches m USING(match_id) LEFT JOIN bot_accounts ba ON ba.group_id=p.group_id AND ba.user_id=p.user_id LEFT JOIN members n ON n.group_id=p.group_id AND n.user_id=p.user_id WHERE p.group_id=?"
-                + (" AND p.user_id=?" if user else "")
+                "SELECT p.*,COALESCE(pm.mode,'score') AS mode,m.team_a,m.team_b,m.start_at,m.lock_at,m.status,m.result_a,m.result_b,n.name,mt.tournament_id,t.name AS tournament,CASE WHEN ba.user_id IS NULL THEN 0 ELSE 1 END AS is_bot FROM predictions p JOIN matches m USING(match_id) LEFT JOIN prediction_modes pm ON pm.group_id=p.group_id AND pm.user_id=p.user_id AND pm.match_id=p.match_id LEFT JOIN match_tournaments mt USING(match_id) LEFT JOIN tournaments t USING(tournament_id) LEFT JOIN bot_accounts ba ON ba.group_id=p.group_id AND ba.user_id=p.user_id LEFT JOIN members n ON n.group_id=p.group_id AND n.user_id=p.user_id"
+                + where
                 + " ORDER BY p.updated_at DESC",
-                (group, user) if user else (group,),
+                params,
             )
         ]
+
+    def rank_results(self, group, day, tournament_id, *, batch=False):
+        """Read actual results and this group's correct settled predictions only."""
+        watched = (
+            self.db.execute(
+                "SELECT match_ids FROM rank_days WHERE day=? AND group_id=?",
+                (day, group),
+            ).fetchone()
+            if batch
+            else None
+        )
+        watched_ids = set(json.loads(watched[0])) if watched else None
+        matches = [
+            m
+            for m in self.matches()
+            if m["tournament_id"] == tournament_id
+            and (
+                m["match_id"] in watched_ids
+                if watched_ids is not None
+                else m["day"] == day
+            )
+        ]
+        for match in matches:
+            match["winners"] = []
+            if match["result_a"] is None or match["result_b"] is None:
+                continue
+            match["winners"] = [
+                dict(r)
+                for r in self.db.execute(
+                    """
+                SELECT p.user_id,COALESCE(n.name,p.user_id) AS name,
+                    CASE WHEN ba.user_id IS NULL THEN 0 ELSE 1 END AS is_bot
+                FROM predictions p LEFT JOIN members n ON n.group_id=p.group_id AND n.user_id=p.user_id
+                LEFT JOIN bot_accounts ba ON ba.group_id=p.group_id AND ba.user_id=p.user_id
+                WHERE p.group_id=? AND p.match_id=? AND p.points IS NOT NULL
+                    AND (p.a>p.b)=? ORDER BY p.user_id""",
+                    (group, match["match_id"], match["result_a"] > match["result_b"]),
+                )
+            ]
+        return matches
 
     def last_match(self, group: str, user: str):
         rows = self.predictions(group, user)
@@ -552,6 +846,21 @@ class PredictionStore:
                 (day, kind, group),
             ).fetchone()
         )
+
+    def report_delivered(self, group, match_id):
+        return bool(
+            self.db.execute(
+                "SELECT 1 FROM match_report_deliveries WHERE group_id=? AND match_id=?",
+                (group, match_id),
+            ).fetchone()
+        )
+
+    def mark_report_delivered(self, group, match_id):
+        with self.db:
+            self.db.execute(
+                "INSERT OR IGNORE INTO match_report_deliveries VALUES(?,?,?)",
+                (group, match_id, datetime.now().astimezone().isoformat()),
+            )
 
     def watch_rank_day(self, day: str, group: str, match_ids):
         if self.delivered(day, "赛后积分", group):
